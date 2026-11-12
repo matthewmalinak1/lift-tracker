@@ -14,7 +14,13 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
       await api.login(password);
       onSuccess();
     } catch (err) {
-      setError(err instanceof UnauthorizedError ? "Wrong password." : "Couldn't reach the server.");
+      setError(
+        err instanceof UnauthorizedError
+          ? "Wrong password."
+          : String(err).includes("503")
+            ? "Login isn't set up on the server yet (check APP_PASSWORD and SESSION_SECRET in Vercel)."
+            : "Couldn't reach the server.",
+      );
       setPassword("");
     } finally {
       setBusy(false);

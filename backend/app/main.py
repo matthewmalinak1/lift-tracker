@@ -56,6 +56,10 @@ def health() -> Health:
 
 @app.post("/api/auth/login", response_model=Me)
 async def login(body: LoginIn, response: Response) -> Me:
+    if not auth.auth_configured():
+        # Still refuses the login (fails closed), but says why, so a missing
+        # environment variable isn't mistaken for a wrong password.
+        raise HTTPException(503, "Login isn't set up on the server yet")
     if not auth.check_password(body.password):
         # Slow down repeated guessing.
         await asyncio.sleep(1)
