@@ -3,6 +3,7 @@ import { api, setUnauthorizedHandler, type Health } from "./api";
 import Body from "./components/Body";
 import Calendar from "./components/Calendar";
 import Login from "./components/Login";
+import Logo from "./components/Logo";
 
 type Tab = "body" | "calendar" | "log" | "progress";
 
@@ -51,7 +52,9 @@ export default function App() {
   return (
     <div className="app">
       <header className="top-bar">
-        <h1>Lift Tracker</h1>
+        <h1 className="brand">
+          <Logo height={30} />
+        </h1>
         <div className="top-actions">
           <span
             className={`status-dot ${online ? "on" : "off"}`}
