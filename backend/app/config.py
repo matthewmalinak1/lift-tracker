@@ -27,9 +27,11 @@ def _normalize_db_url(url: str) -> str:
 
 @dataclass(frozen=True)
 class Settings:
-    # Falls back to a local SQLite file so the app runs with zero setup.
+    # Vercel's Neon integration sets DATABASE_URL (and POSTGRES_URL as an
+    # alias). With neither set, fall back to a local SQLite file so the app
+    # runs with zero setup.
     database_url: str = _normalize_db_url(
-        os.getenv("DATABASE_URL", "sqlite:///./local.db")
+        os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL") or "sqlite:///./local.db"
     )
     weight_unit: str = os.getenv("WEIGHT_UNIT", "lb")
 
