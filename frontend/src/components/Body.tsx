@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { api, type BodyStatus, type Muscle, type WhoopToday } from "../api";
 import { BACK, FRONT, HEAD, OUTLINE_HALF, VIEW_H, VIEW_W, type MuscleShape } from "./bodyShapes";
 
@@ -91,11 +91,11 @@ function StatPanel({ label, statKey, whoop, side }: {
   );
 }
 
-function Figure({ shapes, status, selected, onSelect }: {
+function Figure({ shapes, status, selected, label }: {
   shapes: MuscleShape[];
   status: BodyStatus | null;
   selected: Muscle | null;
-  onSelect: (m: Muscle) => void;
+  label: string;
 }) {
   const mirror = `translate(${VIEW_W}, 0) scale(-1, 1)`;
   const renderMuscle = (shape: MuscleShape, i: number, mirrored: boolean) => {
@@ -114,13 +114,13 @@ function Figure({ shapes, status, selected, onSelect }: {
         strokeWidth={isSel ? 1.6 : 0.9}
         filter={f > 0.05 ? "url(#glow-strong)" : undefined}
         className="muscle"
-        onClick={() => onSelect(shape.muscle)}
+        data-muscle={shape.muscle}
       />
     );
   };
 
   return (
-    <svg viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} className="hologram" role="img" aria-label="Body recovery map">
+    <svg viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} className="hologram" role="img" aria-label={label}>
       <defs>
         <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
           <feGaussianBlur stdDeviation="2" result="b" />
@@ -173,10 +173,125 @@ function Figure({ shapes, status, selected, onSelect }: {
   );
 }
 
+/**
+ * Drag left/right to spin the hologram. The front and back figures are the two
+ * faces of a card turned with CSS 3D transforms (rotateY plus
+ * backface-visibility), so the back appears as the body turns past 90°. On
+ * release it keeps spinning with the flick's momentum, then eases to whichever
+ * face it's closest to. A touch that barely moves counts as a tap and selects
+ * the muscle under the finger.
+ */
+function Turntable({ status, selected, onSelect }: {
+  status: BodyStatus | null;
+  selected: Muscle | null;
+  onSelect: (m: Muscle | null) => void;
+}) {
+  const [angle, setAngle] = useState(0);
+  const [hinted, setHinted] = useState(false);
+  const angleRef = useRef(0);
+  const drag = useRef<{ x: number; startX: number; moved: boolean; v: number; t: number } | null>(null);
+  const raf = useRef<number | null>(null);
+
+  const set = (a: number) => {
+    angleRef.current = a;
+    setAngle(a);
+  };
+  const stopAnim = () => {
+    if (raf.current !== null) cancelAnimationFrame(raf.current);
+    raf.current = null;
+  };
+
+  const DEG_PER_PX = 0.6;
+
+  const down = (e: PointerEvent<HTMLDivElement>) => {
+    stopAnim();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { x: e.clientX, startX: e.clientX, moved: false, v: 0, t: performance.now() };
+  };
+
+  const move = (e: PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d) return;
+    const dx = e.clientX - d.x;
+    const now = performance.now();
+    if (Math.abs(e.clientX - d.startX) > 6) {
+      d.moved = true;
+      setHinted(true);
+    }
+    if (d.moved) {
+      set(angleRef.current + dx * DEG_PER_PX);
+      // velocity in degrees per ms, smoothed
+      d.v = 0.8 * ((dx * DEG_PER_PX) / Math.max(1, now - d.t)) + 0.2 * d.v;
+    }
+    d.x = e.clientX;
+    d.t = now;
+  };
+
+  const up = (e: PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    drag.current = null;
+    if (!d) return;
+
+    if (!d.moved) {
+      // Tap: find the muscle under the finger (pointer capture hides it from
+      // normal click events).
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const m = el?.getAttribute("data-muscle") as Muscle | null;
+      onSelect(m && m !== selected ? m : null);
+      return;
+    }
+
+    // Coast with momentum, then settle on the nearest face (0° or 180°).
+    let v = d.v;
+    let last = performance.now();
+    const step = (now: number) => {
+      const dt = now - last;
+      last = now;
+      v *= Math.pow(0.994, dt);
+      if (Math.abs(v) > 0.02) {
+        set(angleRef.current + v * dt);
+        raf.current = requestAnimationFrame(step);
+        return;
+      }
+      const target = Math.round(angleRef.current / 180) * 180;
+      const diff = target - angleRef.current;
+      if (Math.abs(diff) < 0.3) {
+        set(target);
+        raf.current = null;
+        return;
+      }
+      set(angleRef.current + diff * Math.min(1, dt / 90));
+      raf.current = requestAnimationFrame(step);
+    };
+    raf.current = requestAnimationFrame(step);
+  };
+
+  useEffect(() => stopAnim, []);
+
+  return (
+    <div
+      className="turntable"
+      onPointerDown={down}
+      onPointerMove={move}
+      onPointerUp={up}
+      onPointerCancel={up}
+    >
+      <div className="turntable-card" style={{ transform: `rotateY(${angle}deg)` }}>
+        <div className="face front">
+          <Figure shapes={FRONT} status={status} selected={selected} label="Body recovery map, front" />
+        </div>
+        <div className="face back">
+          <Figure shapes={BACK} status={status} selected={selected} label="Body recovery map, back" />
+        </div>
+      </div>
+      <span className={`turn-hint ${hinted ? "gone" : ""}`}>⟲ drag to rotate</span>
+    </div>
+  );
+}
+
 export default function Body() {
   const [status, setStatus] = useState<BodyStatus | null>(null);
   const [error, setError] = useState(false);
-  const [view, setView] = useState<"front" | "back">("front");
   const [selected, setSelected] = useState<Muscle | null>(null);
 
   useEffect(() => {
@@ -204,12 +319,7 @@ export default function Body() {
         </div>
 
         <div className="hud-figure">
-          <Figure
-            shapes={view === "front" ? FRONT : BACK}
-            status={status}
-            selected={selected}
-            onSelect={(m) => setSelected(m === selected ? null : m)}
-          />
+          <Turntable status={status} selected={selected} onSelect={setSelected} />
         </div>
 
         <div className="hud-col">
@@ -217,14 +327,6 @@ export default function Body() {
             <StatPanel key={s.key} label={s.label} statKey={s.key} whoop={whoop} side="right" />
           ))}
         </div>
-      </div>
-
-      <div className="segmented">
-        {(["front", "back"] as const).map((v) => (
-          <button key={v} className={view === v ? "active" : ""} onClick={() => setView(v)}>
-            {v === "front" ? "Front" : "Back"}
-          </button>
-        ))}
       </div>
 
       <div className="heat-legend">

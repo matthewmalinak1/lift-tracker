@@ -379,26 +379,6 @@ main {
   .scan-band { display: none; }
 }
 
-.segmented {
-  align-self: center;
-  display: flex;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 3px;
-}
-.segmented button {
-  padding: 6px 18px;
-  border-radius: 8px;
-  color: var(--muted);
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-.segmented button.active {
-  background: var(--surface-2);
-  color: var(--accent);
-}
-
 .heat-legend {
   display: flex;
   align-items: center;
@@ -553,4 +533,48 @@ main {
   40% { transform: translateX(8px); }
   60% { transform: translateX(-5px); }
   80% { transform: translateX(5px); }
+}
+
+/* Rotating hologram */
+.turntable {
+  position: relative;
+  width: 100%;
+  perspective: 900px;
+  touch-action: pan-y; /* vertical swipes still scroll the page */
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+}
+.turntable:active {
+  cursor: grabbing;
+}
+.turntable-card {
+  position: relative;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.turntable .face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.turntable .face.back {
+  position: absolute;
+  inset: 0;
+  transform: rotateY(180deg);
+}
+.turn-hint {
+  position: absolute;
+  left: 50%;
+  bottom: -2px;
+  transform: translateX(-50%);
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity 0.6s;
+}
+.turn-hint.gone {
+  opacity: 0;
 }
