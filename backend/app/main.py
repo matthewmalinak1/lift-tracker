@@ -59,7 +59,8 @@ async def login(body: LoginIn, response: Response) -> Me:
     if not auth.auth_configured():
         # Still refuses the login (fails closed), but says why, so a missing
         # environment variable isn't mistaken for a wrong password.
-        raise HTTPException(503, "Login isn't set up on the server yet")
+        missing = " and ".join(auth.missing_settings())
+        raise HTTPException(503, f"Login isn't set up on the server yet: {missing} is missing")
     if not auth.check_password(body.password):
         # Slow down repeated guessing.
         await asyncio.sleep(1)

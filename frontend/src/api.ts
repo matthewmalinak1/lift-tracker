@@ -51,7 +51,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     onUnauthorized();
     throw new UnauthorizedError("Not logged in");
   }
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    const detail = await res
+      .json()
+      .then((b: { detail?: unknown }) => (typeof b.detail === "string" ? b.detail : ""))
+      .catch(() => "");
+    throw new Error(`${res.status} ${detail || res.statusText}`);
+  }
   return res.json() as Promise<T>;
 }
 

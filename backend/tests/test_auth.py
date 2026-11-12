@@ -54,4 +54,5 @@ def test_fails_closed_when_not_configured(anon, monkeypatch, missing):
     monkeypatch.delenv(missing)
     r = anon.post("/api/auth/login", json={"password": "test-password"})
     assert r.status_code == 503
+    assert missing in r.json()["detail"]
     assert "session" not in r.cookies

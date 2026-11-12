@@ -50,8 +50,18 @@ def _sign(payload: bytes, secret: bytes) -> str:
     return _b64(hmac.new(secret, payload, hashlib.sha256).digest())
 
 
+def missing_settings() -> list[str]:
+    """Names (never values) of required login settings that aren't set."""
+    missing = []
+    if _password() is None:
+        missing.append("APP_PASSWORD")
+    if _secret() is None:
+        missing.append("SESSION_SECRET")
+    return missing
+
+
 def auth_configured() -> bool:
-    return _password() is not None and _secret() is not None
+    return not missing_settings()
 
 
 def check_password(candidate: str) -> bool:

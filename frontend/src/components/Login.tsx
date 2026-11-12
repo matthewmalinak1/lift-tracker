@@ -18,7 +18,7 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
         err instanceof UnauthorizedError
           ? "Wrong password."
           : String(err).includes("503")
-            ? "Login isn't set up on the server yet (check APP_PASSWORD and SESSION_SECRET in Vercel)."
+            ? String(err).replace(/^Error: 503 /, "") + " (set it in Vercel, then redeploy)."
             : "Couldn't reach the server.",
       );
       setPassword("");
