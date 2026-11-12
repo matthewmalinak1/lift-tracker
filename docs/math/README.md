@@ -8,6 +8,7 @@ This folder documents every model in the app: the assumptions, the equations, an
 | 2 | [Kalman filter](#2-kalman-filter-on-e1rm) | What is my *true* strength today, and how sure are we? | Planned (Phase 3) |
 | 3 | [Bayesian readiness model](#3-bayesian-readiness-model) | How much do recovery, HRV and sleep move performance? | Planned (Phase 4) |
 | 4 | [Fitness-fatigue model](#4-fitness-fatigue-model) | How do training load, fitness and fatigue add up over time? | Planned (Phase 5) |
+| 5 | [Muscle recovery heat map](muscle-recovery.md) | Which muscles are still recovering, and how much? | **v1 live** |
 
 Each section gets its own file with derivations and validation results as it is built.
 

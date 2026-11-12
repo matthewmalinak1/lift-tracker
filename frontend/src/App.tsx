@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { api, setUnauthorizedHandler, type Health } from "./api";
+import Body from "./components/Body";
 import Calendar from "./components/Calendar";
 import Login from "./components/Login";
 
-type Tab = "calendar" | "log" | "progress" | "recovery";
+type Tab = "body" | "calendar" | "log" | "progress";
 
 const TABS: { id: Tab; label: string }[] = [
+  { id: "body", label: "Body" },
   { id: "calendar", label: "Calendar" },
   { id: "log", label: "Log" },
   { id: "progress", label: "Progress" },
-  { id: "recovery", label: "Recovery" },
 ];
 
 function Placeholder({ title, phase, text }: { title: string; phase: string; text: string }) {
@@ -23,7 +24,7 @@ function Placeholder({ title, phase, text }: { title: string; phase: string; tex
 }
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("calendar");
+  const [tab, setTab] = useState<Tab>("body");
   const [health, setHealth] = useState<Health | null>(null);
   // null = still checking, so we don't flash the login screen on every open.
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
@@ -63,6 +64,7 @@ export default function App() {
       </header>
 
       <main>
+        {tab === "body" && <Body />}
         {tab === "calendar" && <Calendar />}
         {tab === "log" && (
           <Placeholder
@@ -76,13 +78,6 @@ export default function App() {
             title="Strength progress"
             phase="Phase 3"
             text="Estimated 1RM per lift, smoothed with a Kalman filter and shown with confidence bands."
-          />
-        )}
-        {tab === "recovery" && (
-          <Placeholder
-            title="WHOOP"
-            phase="Phase 2"
-            text="Recovery, HRV, sleep, strain and steps synced daily from the WHOOP API."
           />
         )}
       </main>

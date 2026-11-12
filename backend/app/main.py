@@ -2,7 +2,7 @@
 
 import asyncio
 import calendar
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Cookie, Depends, FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,15 +10,18 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from . import auth
+from . import auth, recovery
 from .db import engine, get_session
-from .models import Exercise, Set, Workout
+from .models import Exercise, Set, WhoopDaily, Workout
 from .schemas import (
+    BodyStatus,
     ExerciseIn,
     ExerciseOut,
     Health,
     LoginIn,
     Me,
+    MuscleStatus,
+    WhoopToday,
     WorkoutIn,
     WorkoutOut,
 )
@@ -145,6 +148,56 @@ def create_workout(body: WorkoutIn, session: Session = Depends(get_session)) -> 
     session.commit()
     session.refresh(workout)
     return workout
+
+
+# --- Body (home screen) -----------------------------------------------------
+
+
+def _hits_for(workout: Workout) -> list[recovery.Hit]:
+    defaults = recovery.DEFAULT_MUSCLES[workout.split_day]
+    if not workout.sets:
+        # No set detail: count the split's main muscles as fully hit.
+        return [recovery.Hit(m, workout.date, None) for m in defaults]
+    hits = []
+    for s in workout.sets:
+        muscles = [recovery.Muscle(m) for m in s.exercise.muscles] or defaults
+        hits.extend(recovery.Hit(m, workout.date, 1) for m in muscles)
+    return hits
+
+
+@private.get("/body", response_model=BodyStatus)
+def body_status(
+    today: date | None = Query(
+        default=None, description="The phone's local date, so 'today' matches the user's day"
+    ),
+    session: Session = Depends(get_session),
+) -> BodyStatus:
+    """Per-muscle recovery for the body heat map, plus the latest WHOOP numbers."""
+    today = today or date.today()
+    since = today - timedelta(days=recovery.RECOVERY_DAYS)
+    workouts = session.scalars(
+        select(Workout)
+        .where(Workout.date.between(since, today))
+        .options(selectinload(Workout.sets).selectinload(Set.exercise))
+    )
+    hits = [h for w in workouts for h in _hits_for(w)]
+    states = recovery.muscle_states(hits, today)
+
+    whoop = session.scalars(
+        select(WhoopDaily).where(WhoopDaily.date <= today).order_by(WhoopDaily.date.desc())
+    ).first()
+
+    return BodyStatus(
+        today=today,
+        recovery_days=recovery.RECOVERY_DAYS,
+        muscles={
+            m: MuscleStatus(
+                fatigue=st.fatigue, last_trained=st.last_trained, days_since=st.days_since
+            )
+            for m, st in states.items()
+        },
+        whoop=WhoopToday.model_validate(whoop) if whoop else None,
+    )
 
 
 app.include_router(private)

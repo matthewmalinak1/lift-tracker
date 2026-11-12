@@ -49,3 +49,37 @@ def test_workout_with_unknown_exercise_is_rejected(client):
         },
     )
     assert r.status_code == 422
+
+
+def test_body_status_shades_recently_trained_muscles(client):
+    r = client.post(
+        "/api/exercises",
+        json={"name": "Hanging Leg Raise", "split_day": "legs", "muscles": ["abs"]},
+    )
+    abs_id = r.json()["id"]
+    client.post(
+        "/api/workouts",
+        json={
+            "date": "2026-11-11",
+            "split_day": "legs",
+            "sets": [
+                {"exercise_id": abs_id, "set_number": 1, "weight": 0, "reps": 15},
+                {"exercise_id": abs_id, "set_number": 2, "weight": 0, "reps": 12},
+            ],
+        },
+    )
+    # A session logged with no set detail counts the split's default muscles.
+    client.post("/api/workouts", json={"date": "2026-11-12", "split_day": "back_shoulder_tri"})
+
+    r = client.get("/api/body", params={"today": "2026-11-12"})
+    assert r.status_code == 200
+    m = r.json()["muscles"]
+    assert m["abs"]["days_since"] == 1
+    assert 0 < m["abs"]["fatigue"] < 1  # 2 sets, 1 day ago
+    assert m["lats"]["fatigue"] == 1.0  # full hit today
+    assert m["hamstrings"]["fatigue"] == 0.0  # tagged exercise only hit abs
+    assert r.json()["whoop"] is None
+
+
+def test_body_requires_login(anon):
+    assert anon.get("/api/body").status_code == 401

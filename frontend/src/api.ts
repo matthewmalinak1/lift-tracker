@@ -30,6 +30,51 @@ export interface Health {
   database: string;
 }
 
+export type Muscle =
+  | "chest"
+  | "shoulders"
+  | "biceps"
+  | "triceps"
+  | "forearms"
+  | "abs"
+  | "obliques"
+  | "traps"
+  | "lats"
+  | "lower_back"
+  | "glutes"
+  | "quads"
+  | "hamstrings"
+  | "calves";
+
+export interface MuscleStatus {
+  fatigue: number; // 0 = recovered, 1 = just trained hard
+  last_trained: string | null;
+  days_since: number | null;
+}
+
+export interface WhoopToday {
+  date: string;
+  recovery_score: number | null;
+  hrv_rmssd_ms: number | null;
+  resting_hr: number | null;
+  sleep_hours: number | null;
+  sleep_performance: number | null;
+  strain: number | null;
+  steps: number | null;
+}
+
+export interface BodyStatus {
+  today: string;
+  recovery_days: number;
+  muscles: Record<Muscle, MuscleStatus>;
+  whoop: WhoopToday | null;
+}
+
+export function localDateISO(d = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export interface Me {
   logged_in: boolean;
 }
@@ -70,6 +115,7 @@ export const api = {
   me: () => get<Me>("/api/auth/me"),
   login: (password: string) => post<Me>("/api/auth/login", { password }),
   logout: () => post<Me>("/api/auth/logout"),
+  body: () => get<BodyStatus>(`/api/body?today=${localDateISO()}`),
   workouts: (year: number, month: number) =>
     get<Workout[]>(`/api/workouts?year=${year}&month=${month}`),
 };

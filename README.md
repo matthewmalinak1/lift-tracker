@@ -85,6 +85,7 @@ Single-user password login. The password exists only as a Vercel environment var
 ## Roadmap
 
 - [x] **Phase 0:** scaffold, data model, CI, deploy pipeline, installable app shell
+- [x] **Home screen:** holographic body map; muscles shade red after training and fade over 3 days ([math](docs/math/muscle-recovery.md)); WHOOP stat panels
 - [ ] **Phase 1:** workout logging, exercise library, calendar day view, "last time" targets, single-user login, offline set queue
 - [ ] **Phase 2:** WHOOP OAuth and daily sync (recovery, HRV, sleep, strain, steps)
 - [ ] **Phase 3:** e1RM estimation and Kalman filter with confidence bands

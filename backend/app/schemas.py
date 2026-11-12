@@ -5,12 +5,14 @@ from datetime import date
 from pydantic import BaseModel, ConfigDict, Field
 
 from .models import SplitDay
+from .recovery import Muscle
 
 
 class ExerciseIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     split_day: SplitDay
     equipment: str | None = None
+    muscles: list[Muscle] = []
 
 
 class ExerciseOut(ExerciseIn):
@@ -62,3 +64,29 @@ class LoginIn(BaseModel):
 
 class Me(BaseModel):
     logged_in: bool
+
+
+class MuscleStatus(BaseModel):
+    fatigue: float
+    last_trained: date | None
+    days_since: int | None
+
+
+class WhoopToday(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    date: date
+    recovery_score: float | None
+    hrv_rmssd_ms: float | None
+    resting_hr: float | None
+    sleep_hours: float | None
+    sleep_performance: float | None
+    strain: float | None
+    steps: int | None
+
+
+class BodyStatus(BaseModel):
+    today: date
+    recovery_days: int
+    muscles: dict[Muscle, MuscleStatus]
+    whoop: WhoopToday | None

@@ -52,6 +52,9 @@ class Exercise(Base):
     split_day: Mapped[SplitDay] = mapped_column(Enum(SplitDay))
     # Free text like "barbell", "dumbbell", "machine", "cable".
     equipment: Mapped[str | None] = mapped_column(String(40))
+    # Muscles this exercise trains, e.g. ["chest", "shoulders"] (see recovery.Muscle).
+    # Empty = fall back to the split day's default muscles.
+    muscles: Mapped[list[str]] = mapped_column(JSON, default=list)
     active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
