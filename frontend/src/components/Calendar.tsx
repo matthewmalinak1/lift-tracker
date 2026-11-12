@@ -97,8 +97,8 @@ export default function Calendar() {
             <>
               <p className="accent">{SPLIT_LABELS[selectedWorkout.split_day]}</p>
               <p className="muted">
-                {selectedWorkout.sets.length} sets logged. The per-exercise breakdown arrives in
-                Phase 1.
+                {selectedWorkout.sets.length} {selectedWorkout.sets.length === 1 ? "set" : "sets"}{" "}
+                logged. The per-exercise breakdown arrives in Phase 1.
               </p>
             </>
           ) : (
