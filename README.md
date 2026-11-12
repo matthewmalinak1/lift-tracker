@@ -64,6 +64,8 @@ npm run dev
 
 Open http://localhost:5173. The dev server forwards `/api` calls to the backend.
 
+Copy `.env.example` to `.env` first; it holds the local login password (`dev-password`).
+
 **Tests:** `cd backend` then `pytest`.
 
 > If PowerShell blocks `Activate.ps1`, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once.
@@ -72,8 +74,13 @@ Open http://localhost:5173. The dev server forwards `/api` calls to the backend.
 
 1. Import the repo at vercel.com/new. `vercel.json` already defines the build, the Python function and the routing.
 2. In the Vercel project, open **Storage → Create → Neon** (free). This sets `DATABASE_URL` automatically.
-3. Redeploy. Every push to `main` deploys again.
-4. On the phone, open the site and choose **Add to Home Screen**.
+3. In **Settings → Environment Variables**, add `APP_PASSWORD` (the login password) and `SESSION_SECRET` (a random string, e.g. from `python -c "import secrets; print(secrets.token_urlsafe(32))"`).
+4. Redeploy. Every push to `main` deploys again.
+5. On the phone, open the site and choose **Add to Home Screen**.
+
+## Security
+
+Single-user password login. The password exists only as a Vercel environment variable. A successful login sets an HttpOnly, SameSite=Lax cookie holding an HMAC-SHA256-signed token with a 90-day expiry, checked on every private route without any server-side session storage. Comparisons are constant-time, failed logins are delayed, and missing configuration fails closed. See [`backend/app/auth.py`](backend/app/auth.py).
 
 ## Roadmap
 

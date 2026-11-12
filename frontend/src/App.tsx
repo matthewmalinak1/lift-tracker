@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { api, type Health } from "./api";
+import { api, setUnauthorizedHandler, type Health } from "./api";
 import Calendar from "./components/Calendar";
+import Login from "./components/Login";
 
 type Tab = "calendar" | "log" | "progress" | "recovery";
 
@@ -24,18 +25,41 @@ function Placeholder({ title, phase, text }: { title: string; phase: string; tex
 export default function App() {
   const [tab, setTab] = useState<Tab>("calendar");
   const [health, setHealth] = useState<Health | null>(null);
+  // null = still checking, so we don't flash the login screen on every open.
+  const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
 
   useEffect(() => {
+    setUnauthorizedHandler(() => setLoggedIn(false));
     api.health().then(setHealth).catch(() => setHealth(null));
+    api
+      .me()
+      .then((m) => setLoggedIn(m.logged_in))
+      .catch(() => setLoggedIn(false));
   }, []);
 
   const online = health?.database === "ok";
+
+  if (loggedIn === null) return <div className="app" />;
+  if (!loggedIn) return <Login onSuccess={() => setLoggedIn(true)} />;
+
+  const logout = async () => {
+    await api.logout().catch(() => {});
+    setLoggedIn(false);
+  };
 
   return (
     <div className="app">
       <header className="top-bar">
         <h1>Lift Tracker</h1>
-        <span className={`status-dot ${online ? "on" : "off"}`} title={online ? "API + database connected" : "API offline"} />
+        <div className="top-actions">
+          <span
+            className={`status-dot ${online ? "on" : "off"}`}
+            title={online ? "API + database connected" : "Database not connected"}
+          />
+          <button className="text-btn" onClick={logout}>
+            Log out
+          </button>
+        </div>
       </header>
 
       <main>

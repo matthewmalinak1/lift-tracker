@@ -29,8 +29,20 @@ else:
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
+_schema_ready = False
+
+
 def get_session() -> Iterator[Session]:
-    """FastAPI dependency: one session per request, always closed."""
+    """FastAPI dependency: one session per request, always closed.
+
+    Tables are created on the first request that needs the database, not at
+    startup, so routes that don't touch it (like login) keep working even if
+    the database is unreachable.
+    """
+    global _schema_ready
+    if not _schema_ready:
+        init_db()
+        _schema_ready = True
     session = SessionLocal()
     try:
         yield session

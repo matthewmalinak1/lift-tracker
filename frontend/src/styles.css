@@ -191,3 +191,69 @@ main {
   color: var(--accent);
   background: var(--surface-2);
 }
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.text-btn {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 6px 2px;
+}
+
+/* Login */
+.login {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+}
+.login-icon {
+  width: 84px;
+  height: 84px;
+  border-radius: 20px;
+}
+.login h1 {
+  font-size: 1.5rem;
+  margin-bottom: 8px;
+}
+.login form {
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.login input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 16px; /* 16px+ stops iOS from zooming into the field */
+}
+.login input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.primary {
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 700;
+}
+.primary:disabled {
+  opacity: 0.5;
+}
+.error {
+  color: #ff8a8a;
+  text-align: center;
+  margin: 0;
+}

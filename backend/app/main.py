@@ -1,27 +1,29 @@
 """FastAPI application: every backend route lives under /api."""
 
+import asyncio
 import calendar
-from contextlib import asynccontextmanager
 from datetime import date
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import APIRouter, Cookie, Depends, FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from .db import get_session, init_db
+from . import auth
+from .db import engine, get_session
 from .models import Exercise, Set, Workout
-from .schemas import ExerciseIn, ExerciseOut, Health, WorkoutIn, WorkoutOut
+from .schemas import (
+    ExerciseIn,
+    ExerciseOut,
+    Health,
+    LoginIn,
+    Me,
+    WorkoutIn,
+    WorkoutOut,
+)
 
-
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    init_db()
-    yield
-
-
-app = FastAPI(title="Lift Tracker API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Lift Tracker API", version="0.2.0")
 
 # Local dev only: the Vite dev server runs on :5173 and calls the API on :8000.
 # In production the frontend and API share one domain, so CORS doesn't apply.
@@ -30,23 +32,53 @@ app.add_middleware(
     allow_origins=["http://localhost:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
+
+# Every route on this router requires a valid session cookie.
+private = APIRouter(prefix="/api", dependencies=[Depends(auth.require_auth)])
 
 
 @app.get("/api/health", response_model=Health)
-def health(session: Session = Depends(get_session)) -> Health:
+def health() -> Health:
+    """Public status check. Reports the database without exposing any data."""
     try:
-        session.execute(text("SELECT 1"))
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
         db_status = "ok"
-    except Exception:  # pragma: no cover - only hit when the DB is down
+    except Exception:  # noqa: BLE001 - any failure means "unreachable"
         db_status = "unreachable"
     return Health(status="ok", database=db_status)
+
+
+# --- Auth (public) ----------------------------------------------------------
+
+
+@app.post("/api/auth/login", response_model=Me)
+async def login(body: LoginIn, response: Response) -> Me:
+    if not auth.check_password(body.password):
+        # Slow down repeated guessing.
+        await asyncio.sleep(1)
+        raise HTTPException(401, "Wrong password")
+    auth.set_session_cookie(response, auth.make_token())
+    return Me(logged_in=True)
+
+
+@app.post("/api/auth/logout", response_model=Me)
+def logout(response: Response) -> Me:
+    auth.clear_session_cookie(response)
+    return Me(logged_in=False)
+
+
+@app.get("/api/auth/me", response_model=Me)
+def me(session: str | None = Cookie(default=None)) -> Me:
+    return Me(logged_in=auth.token_is_valid(session))
 
 
 # --- Exercises --------------------------------------------------------------
 
 
-@app.get("/api/exercises", response_model=list[ExerciseOut])
+@private.get("/exercises", response_model=list[ExerciseOut])
 def list_exercises(session: Session = Depends(get_session)) -> list[Exercise]:
     return list(
         session.scalars(
@@ -55,7 +87,7 @@ def list_exercises(session: Session = Depends(get_session)) -> list[Exercise]:
     )
 
 
-@app.post("/api/exercises", response_model=ExerciseOut, status_code=201)
+@private.post("/exercises", response_model=ExerciseOut, status_code=201)
 def create_exercise(body: ExerciseIn, session: Session = Depends(get_session)) -> Exercise:
     exercise = Exercise(**body.model_dump())
     session.add(exercise)
@@ -70,7 +102,7 @@ def create_exercise(body: ExerciseIn, session: Session = Depends(get_session)) -
 # --- Workouts ---------------------------------------------------------------
 
 
-@app.get("/api/workouts", response_model=list[WorkoutOut])
+@private.get("/workouts", response_model=list[WorkoutOut])
 def list_workouts(
     year: int = Query(ge=2000, le=2100),
     month: int = Query(ge=1, le=12),
@@ -89,7 +121,7 @@ def list_workouts(
     )
 
 
-@app.post("/api/workouts", response_model=WorkoutOut, status_code=201)
+@private.post("/workouts", response_model=WorkoutOut, status_code=201)
 def create_workout(body: WorkoutIn, session: Session = Depends(get_session)) -> Workout:
     exercise_ids = {s.exercise_id for s in body.sets}
     if exercise_ids:
@@ -108,3 +140,6 @@ def create_workout(body: WorkoutIn, session: Session = Depends(get_session)) -> 
     session.commit()
     session.refresh(workout)
     return workout
+
+
+app.include_router(private)

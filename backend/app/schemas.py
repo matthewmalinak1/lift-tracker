@@ -54,3 +54,11 @@ class WorkoutOut(BaseModel):
 class Health(BaseModel):
     status: str
     database: str
+
+
+class LoginIn(BaseModel):
+    password: str = Field(min_length=1, max_length=200)
+
+
+class Me(BaseModel):
+    logged_in: bool
