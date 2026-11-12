@@ -231,3 +231,24 @@ class PlateauRow(BaseModel):
 class Lab(BaseModel):
     models: list[LabModel]
     plateaus: list[PlateauRow]
+
+
+# --- Import -----------------------------------------------------------------
+
+
+class ImportProblem(BaseModel):
+    sheet: str
+    row: int
+    message: str
+
+
+class ImportReport(BaseModel):
+    committed: bool
+    workouts: int  # workouts in the file
+    sets: int
+    new_exercises: list[str]
+    date_from: date | None
+    date_to: date | None
+    already_in_app: int  # workouts skipped because that date + split exists
+    errors: list[ImportProblem]
+    warnings: list[ImportProblem]

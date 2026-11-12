@@ -8,6 +8,7 @@ import {
   type Summary,
   type Workout,
 } from "../api";
+import ImportHistory from "./ImportHistory";
 import Sheet from "./Sheet";
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
@@ -119,6 +120,7 @@ export default function Calendar({ onChanged }: { onChanged: () => void }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     setError(null);
@@ -205,6 +207,20 @@ export default function Calendar({ onChanged }: { onChanged: () => void }) {
       </div>
 
       {error && <p className="muted small">Couldn't load workouts.</p>}
+
+      <button className="add-ex-btn import-btn" onClick={() => setImporting(true)}>
+        ⇪ Import past workouts from Excel
+      </button>
+
+      <Sheet open={importing} onClose={() => setImporting(false)}>
+        <ImportHistory
+          onDone={() => {
+            setImporting(false);
+            setReload((r) => r + 1);
+            onChanged();
+          }}
+        />
+      </Sheet>
 
       <Sheet open={selected !== null} onClose={() => setSelected(null)}>
         {selected && (

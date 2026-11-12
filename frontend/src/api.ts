@@ -133,6 +133,12 @@ export const api = {
   lift: (id: number) => get<LiftProgress>(`/api/progress/lift/${id}?today=${today()}`),
   volume: (weeks = 4) => get<VolumeWeek[]>(`/api/progress/volume?today=${today()}&weeks=${weeks}`),
   lab: () => get<Lab>(`/api/lab?today=${today()}`),
+  importXlsx: (file: File, commit: boolean) =>
+    request<ImportReport>(`/api/import/xlsx?commit=${commit}&today=${today()}`, {
+      method: "POST",
+      body: file,
+      headers: { "content-type": "application/octet-stream" },
+    }),
 };
 
 
@@ -304,4 +310,24 @@ export const ALL_MUSCLES = Object.keys(MUSCLE_LABELS) as Muscle[];
 
 export function prettyDate(iso: string, opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" }) {
   return new Date(iso + "T00:00").toLocaleDateString(undefined, opts);
+}
+
+// --- Import -----------------------------------------------------------------
+
+export interface ImportProblem {
+  sheet: string;
+  row: number;
+  message: string;
+}
+
+export interface ImportReport {
+  committed: boolean;
+  workouts: number;
+  sets: number;
+  new_exercises: string[];
+  date_from: string | null;
+  date_to: string | null;
+  already_in_app: number;
+  errors: ImportProblem[];
+  warnings: ImportProblem[];
 }

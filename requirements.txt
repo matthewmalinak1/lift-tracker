@@ -3,3 +3,4 @@ sqlalchemy>=2.0
 psycopg[binary]>=3.2
 pydantic>=2.7
 python-dotenv>=1.0
+openpyxl>=3.1

@@ -1260,3 +1260,69 @@ main {
 .plateau-row .status-pill {
   margin-top: 0;
 }
+
+
+/* ---------- Import ---------- */
+.import-btn {
+  width: 100%;
+  margin-top: 18px;
+}
+.import h2 {
+  font-size: 1.15rem;
+  margin-bottom: 8px;
+}
+.import-steps {
+  padding-left: 20px;
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.file-pick {
+  display: block;
+  position: relative;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px dashed var(--accent);
+  text-align: center;
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+.file-pick input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.import-report {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+.import-report .summary-row {
+  margin-bottom: 0;
+}
+.problems {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+}
+.problems ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.problems.errors {
+  background: rgba(255, 77, 94, 0.1);
+  border: 1px solid rgba(255, 77, 94, 0.4);
+}
+.problems.warnings {
+  background: rgba(250, 204, 21, 0.08);
+  border: 1px solid rgba(250, 204, 21, 0.3);
+}
+.import-done {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
