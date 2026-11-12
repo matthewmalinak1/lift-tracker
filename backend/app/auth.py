@@ -24,7 +24,8 @@ import time
 from fastapi import Cookie, HTTPException, Response, status
 
 COOKIE_NAME = "session"
-SESSION_DAYS = 90
+# How long a login lasts before the password is asked for again.
+SESSION_DAYS = 1
 SESSION_SECONDS = SESSION_DAYS * 24 * 60 * 60
 
 

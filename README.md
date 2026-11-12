@@ -80,7 +80,7 @@ Copy `.env.example` to `.env` first; it holds the local login password (`dev-pas
 
 ## Security
 
-Single-user password login. The password exists only as a Vercel environment variable. A successful login sets an HttpOnly, SameSite=Lax cookie holding an HMAC-SHA256-signed token with a 90-day expiry, checked on every private route without any server-side session storage. Comparisons are constant-time, failed logins are delayed, and missing configuration fails closed. See [`backend/app/auth.py`](backend/app/auth.py).
+Single-user password login. The password exists only as a Vercel environment variable. A successful login sets an HttpOnly, SameSite=Lax cookie holding an HMAC-SHA256-signed token with a 1-day expiry, checked on every private route without any server-side session storage. Comparisons are constant-time, failed logins are delayed, and missing configuration fails closed. See [`backend/app/auth.py`](backend/app/auth.py).
 
 ## Roadmap
 
