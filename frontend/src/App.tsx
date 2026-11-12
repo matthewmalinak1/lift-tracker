@@ -2,33 +2,31 @@ import { useEffect, useState } from "react";
 import { api, setUnauthorizedHandler, type Health } from "./api";
 import Body from "./components/Body";
 import Calendar from "./components/Calendar";
+import LabView from "./components/LabView";
+import LogWorkout from "./components/LogWorkout";
 import Login from "./components/Login";
 import Logo from "./components/Logo";
+import Progress from "./components/Progress";
+import Sheet from "./components/Sheet";
 
-type Tab = "body" | "calendar" | "log" | "progress";
+type Tab = "body" | "calendar" | "progress" | "lab";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "body", label: "Body" },
   { id: "calendar", label: "Calendar" },
-  { id: "log", label: "Log" },
   { id: "progress", label: "Progress" },
+  { id: "lab", label: "Lab" },
 ];
-
-function Placeholder({ title, phase, text }: { title: string; phase: string; text: string }) {
-  return (
-    <section className="card">
-      <h2>{title}</h2>
-      <p className="accent">{phase}</p>
-      <p className="muted">{text}</p>
-    </section>
-  );
-}
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("body");
   const [health, setHealth] = useState<Health | null>(null);
   // null = still checking, so we don't flash the login screen on every open.
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
+  const [logging, setLogging] = useState(false);
+  // Bumped after any change to the data so every screen reloads.
+  const [version, setVersion] = useState(0);
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     setUnauthorizedHandler(() => setLoggedIn(false));
@@ -39,6 +37,12 @@ export default function App() {
       .catch(() => setLoggedIn(false));
   }, []);
 
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
   const online = health?.database === "ok";
 
   if (loggedIn === null) return <div className="app" />;
@@ -48,6 +52,7 @@ export default function App() {
     await api.logout().catch(() => {});
     setLoggedIn(false);
   };
+  const changed = () => setVersion((v) => v + 1);
 
   return (
     <div className="app">
@@ -66,24 +71,29 @@ export default function App() {
         </div>
       </header>
 
-      <main>
+      <main key={version}>
         {tab === "body" && <Body />}
-        {tab === "calendar" && <Calendar />}
-        {tab === "log" && (
-          <Placeholder
-            title="Log a workout"
-            phase="Phase 1"
-            text="Pick today's split, then enter weight × reps (and RIR) for your 2 sets per exercise, with last session's numbers shown as a target."
-          />
-        )}
-        {tab === "progress" && (
-          <Placeholder
-            title="Strength progress"
-            phase="Phase 3"
-            text="Estimated 1RM per lift, smoothed with a Kalman filter and shown with confidence bands."
-          />
-        )}
+        {tab === "calendar" && <Calendar onChanged={changed} />}
+        {tab === "progress" && <Progress />}
+        {tab === "lab" && <LabView />}
       </main>
+
+      <button className="fab" onClick={() => setLogging(true)} aria-label="Log a workout">
+        <span>+</span> Log
+      </button>
+
+      <Sheet open={logging} onClose={() => setLogging(false)} full>
+        <LogWorkout
+          onClose={() => setLogging(false)}
+          onSaved={() => {
+            setLogging(false);
+            setToast("Workout saved");
+            changed();
+          }}
+        />
+      </Sheet>
+
+      {toast && <div className="toast">{toast}</div>}
 
       <nav className="tab-bar">
         {TABS.map((t) => (

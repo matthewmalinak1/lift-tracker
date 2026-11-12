@@ -90,3 +90,144 @@ class BodyStatus(BaseModel):
     recovery_days: int
     muscles: dict[Muscle, MuscleStatus]
     whoop: WhoopToday | None
+
+
+# --- Calendar day detail ----------------------------------------------------
+
+
+class DaySet(BaseModel):
+    set_number: int
+    weight: float
+    reps: int
+    rir: int | None
+    e1rm: float
+    is_pr: bool  # best e1RM ever for this exercise, as of this day
+
+
+class DayExercise(BaseModel):
+    exercise_id: int
+    name: str
+    sets: list[DaySet]
+
+
+class DayWorkout(BaseModel):
+    id: int
+    split_day: SplitDay
+    notes: str | None
+    exercises: list[DayExercise]
+    total_sets: int
+    pr_count: int
+
+
+class DayDetail(BaseModel):
+    date: date
+    workouts: list[DayWorkout]
+    whoop: WhoopToday | None
+
+
+class Summary(BaseModel):
+    this_week: int
+    this_month: int
+    total: int
+    last_workout: date | None
+
+
+# --- Logging ----------------------------------------------------------------
+
+
+class LastSet(BaseModel):
+    set_number: int
+    weight: float
+    reps: int
+    rir: int | None
+
+
+class TemplateExercise(BaseModel):
+    id: int
+    name: str
+    muscles: list[Muscle]
+    last_date: date | None
+    last_sets: list[LastSet]
+
+
+class LogTemplate(BaseModel):
+    split_day: SplitDay
+    suggested_split: SplitDay
+    exercises: list[TemplateExercise]
+
+
+# --- Progress ---------------------------------------------------------------
+
+
+class LiftSummary(BaseModel):
+    exercise_id: int
+    name: str
+    split_day: SplitDay
+    sessions: int
+    best_e1rm: float | None
+    current_estimate: float | None
+
+
+class SeriesPoint(BaseModel):
+    date: date
+    observed: float
+    estimate: float
+    lower: float
+    upper: float
+
+
+class TrendOut(BaseModel):
+    status: str
+    pct_per_week: float | None
+    ci_low: float | None
+    ci_high: float | None
+    sessions: int
+    window_days: int
+
+
+class LiftProgress(BaseModel):
+    exercise_id: int
+    name: str
+    unit: str
+    series: list[SeriesPoint]
+    today_estimate: float | None
+    today_lower: float | None
+    today_upper: float | None
+    fitted: bool
+    noise_pct: float | None
+    drift_pct_per_week: float | None
+    best_e1rm: float | None
+    best_e1rm_date: date | None
+    heaviest_weight: float | None
+    heaviest_weight_date: date | None
+    trend: TrendOut
+
+
+class VolumeWeek(BaseModel):
+    week_start: date
+    sets: dict[Muscle, int]
+
+
+# --- Lab --------------------------------------------------------------------
+
+
+class LabModel(BaseModel):
+    key: str
+    name: str
+    question: str
+    status: str  # "live" | "collecting" | "planned"
+    progress: float | None  # 0-1 toward having enough data
+    progress_label: str | None
+    headline: str | None
+    doc: str  # path in the repo
+
+
+class PlateauRow(BaseModel):
+    exercise_id: int
+    name: str
+    trend: TrendOut
+
+
+class Lab(BaseModel):
+    models: list[LabModel]
+    plateaus: list[PlateauRow]

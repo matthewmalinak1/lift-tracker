@@ -1,23 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { api, type BodyStatus, type Muscle, type WhoopToday } from "../api";
+import { api, MUSCLE_LABELS, type BodyStatus, type Muscle, type WhoopToday } from "../api";
 import { BACK, FRONT, HEAD, OUTLINE_HALF, VIEW_H, VIEW_W, type MuscleShape } from "./bodyShapes";
 
-const MUSCLE_LABELS: Record<Muscle, string> = {
-  chest: "Chest",
-  shoulders: "Shoulders",
-  biceps: "Biceps",
-  triceps: "Triceps",
-  forearms: "Forearms",
-  abs: "Abs",
-  obliques: "Obliques",
-  traps: "Traps",
-  lats: "Lats",
-  lower_back: "Lower back",
-  glutes: "Glutes",
-  quads: "Quads",
-  hamstrings: "Hamstrings",
-  calves: "Calves",
-};
 
 // Recovered muscles sit at the theme's light blue; fresh ones glow red.
 const BLUE = [124, 196, 255];

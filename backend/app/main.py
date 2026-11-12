@@ -1,32 +1,17 @@
 """FastAPI application: every backend route lives under /api."""
 
 import asyncio
-import calendar
-from datetime import date, timedelta
 
-from fastapi import APIRouter, Cookie, Depends, FastAPI, HTTPException, Query, Response
+from fastapi import APIRouter, Cookie, Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select, text
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import text
 
-from . import auth, recovery
-from .db import engine, get_session
-from .models import Exercise, Set, WhoopDaily, Workout
-from .schemas import (
-    BodyStatus,
-    ExerciseIn,
-    ExerciseOut,
-    Health,
-    LoginIn,
-    Me,
-    MuscleStatus,
-    WhoopToday,
-    WorkoutIn,
-    WorkoutOut,
-)
+from . import auth
+from .db import engine
+from .routers import body, lab, progress, training
+from .schemas import Health, LoginIn, Me
 
-app = FastAPI(title="Lift Tracker API", version="0.2.0")
+app = FastAPI(title="Lift Tracker API", version="0.3.0")
 
 # Local dev only: the Vite dev server runs on :5173 and calls the API on :8000.
 # In production the frontend and API share one domain, so CORS doesn't apply.
@@ -38,8 +23,6 @@ app.add_middleware(
     allow_credentials=True,
 )
 
-# Every route on this router requires a valid session cookie.
-private = APIRouter(prefix="/api", dependencies=[Depends(auth.require_auth)])
 
 
 @app.get("/api/health", response_model=Health)
@@ -83,121 +66,11 @@ def me(session: str | None = Cookie(default=None)) -> Me:
     return Me(logged_in=auth.token_is_valid(session))
 
 
-# --- Exercises --------------------------------------------------------------
+# --- Private routes (need a valid session) ------------------------------------
 
-
-@private.get("/exercises", response_model=list[ExerciseOut])
-def list_exercises(session: Session = Depends(get_session)) -> list[Exercise]:
-    return list(
-        session.scalars(
-            select(Exercise).where(Exercise.active).order_by(Exercise.split_day, Exercise.name)
-        )
-    )
-
-
-@private.post("/exercises", response_model=ExerciseOut, status_code=201)
-def create_exercise(body: ExerciseIn, session: Session = Depends(get_session)) -> Exercise:
-    exercise = Exercise(**body.model_dump())
-    session.add(exercise)
-    try:
-        session.commit()
-    except IntegrityError as err:
-        session.rollback()
-        raise HTTPException(409, f"Exercise '{body.name}' already exists") from err
-    return exercise
-
-
-# --- Workouts ---------------------------------------------------------------
-
-
-@private.get("/workouts", response_model=list[WorkoutOut])
-def list_workouts(
-    year: int = Query(ge=2000, le=2100),
-    month: int = Query(ge=1, le=12),
-    session: Session = Depends(get_session),
-) -> list[Workout]:
-    """All workouts in one calendar month (feeds the calendar view)."""
-    first = date(year, month, 1)
-    last = date(year, month, calendar.monthrange(year, month)[1])
-    return list(
-        session.scalars(
-            select(Workout)
-            .where(Workout.date.between(first, last))
-            .options(selectinload(Workout.sets))
-            .order_by(Workout.date)
-        )
-    )
-
-
-@private.post("/workouts", response_model=WorkoutOut, status_code=201)
-def create_workout(body: WorkoutIn, session: Session = Depends(get_session)) -> Workout:
-    exercise_ids = {s.exercise_id for s in body.sets}
-    if exercise_ids:
-        found = set(session.scalars(select(Exercise.id).where(Exercise.id.in_(exercise_ids))))
-        missing = exercise_ids - found
-        if missing:
-            raise HTTPException(422, f"Unknown exercise ids: {sorted(missing)}")
-
-    workout = Workout(
-        date=body.date,
-        split_day=body.split_day,
-        notes=body.notes,
-        sets=[Set(**s.model_dump()) for s in body.sets],
-    )
-    session.add(workout)
-    session.commit()
-    session.refresh(workout)
-    return workout
-
-
-# --- Body (home screen) -----------------------------------------------------
-
-
-def _hits_for(workout: Workout) -> list[recovery.Hit]:
-    defaults = recovery.DEFAULT_MUSCLES[workout.split_day]
-    if not workout.sets:
-        # No set detail: count the split's main muscles as fully hit.
-        return [recovery.Hit(m, workout.date, None) for m in defaults]
-    hits = []
-    for s in workout.sets:
-        muscles = [recovery.Muscle(m) for m in s.exercise.muscles] or defaults
-        hits.extend(recovery.Hit(m, workout.date, 1) for m in muscles)
-    return hits
-
-
-@private.get("/body", response_model=BodyStatus)
-def body_status(
-    today: date | None = Query(
-        default=None, description="The phone's local date, so 'today' matches the user's day"
-    ),
-    session: Session = Depends(get_session),
-) -> BodyStatus:
-    """Per-muscle recovery for the body heat map, plus the latest WHOOP numbers."""
-    today = today or date.today()
-    since = today - timedelta(days=recovery.RECOVERY_DAYS)
-    workouts = session.scalars(
-        select(Workout)
-        .where(Workout.date.between(since, today))
-        .options(selectinload(Workout.sets).selectinload(Set.exercise))
-    )
-    hits = [h for w in workouts for h in _hits_for(w)]
-    states = recovery.muscle_states(hits, today)
-
-    whoop = session.scalars(
-        select(WhoopDaily).where(WhoopDaily.date <= today).order_by(WhoopDaily.date.desc())
-    ).first()
-
-    return BodyStatus(
-        today=today,
-        recovery_days=recovery.RECOVERY_DAYS,
-        muscles={
-            m: MuscleStatus(
-                fatigue=st.fatigue, last_trained=st.last_trained, days_since=st.days_since
-            )
-            for m, st in states.items()
-        },
-        whoop=WhoopToday.model_validate(whoop) if whoop else None,
-    )
-
+# Every route on this router requires a valid session cookie.
+private = APIRouter(prefix="/api", dependencies=[Depends(auth.require_auth)])
+for r in (training.router, body.router, progress.router, lab.router):
+    private.include_router(r)
 
 app.include_router(private)
