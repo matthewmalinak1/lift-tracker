@@ -8,7 +8,7 @@ from sqlalchemy import text
 
 from . import auth
 from .db import engine
-from .routers import body, imports, lab, progress, training
+from .routers import body, imports, lab, progress, training, whoop
 from .schemas import Health, LoginIn, Me
 
 app = FastAPI(title="Lift Tracker API", version="0.3.0")
@@ -70,7 +70,15 @@ def me(session: str | None = Cookie(default=None)) -> Me:
 
 # Every route on this router requires a valid session cookie.
 private = APIRouter(prefix="/api", dependencies=[Depends(auth.require_auth)])
-for r in (training.router, body.router, progress.router, lab.router, imports.router):
+for r in (
+    training.router,
+    body.router,
+    progress.router,
+    lab.router,
+    imports.router,
+    whoop.router,
+):
     private.include_router(r)
 
 app.include_router(private)
+app.include_router(whoop.public_router)  # OAuth callback: guarded by the signed state

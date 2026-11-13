@@ -136,6 +136,9 @@ export const api = {
   volume: (weeks = 4) => get<VolumeWeek[]>(`/api/progress/volume?today=${today()}&weeks=${weeks}`),
   lab: () => get<Lab>(`/api/lab?today=${today()}`),
   backtest: () => get<Backtest>("/api/lab/backtest"),
+  whoopStatus: () => get<WhoopStatus>("/api/whoop/status"),
+  whoopSync: () => post<{ days_updated: number; synced_at: string }>("/api/whoop/sync"),
+  whoopDisconnect: () => request<void>("/api/whoop/disconnect", { method: "POST" }),
 };
 
 
@@ -350,4 +353,14 @@ export interface CalendarMonth {
   days: CalendarDay[];
   max_sets: number;
   prs: number;
+}
+
+// --- WHOOP ------------------------------------------------------------------
+
+export interface WhoopStatus {
+  configured: boolean;
+  connected: boolean;
+  last_sync_at: string | null;
+  days_stored: number;
+  first_day: string | null;
 }

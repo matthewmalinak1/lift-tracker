@@ -113,3 +113,21 @@ class WhoopDaily(Base):
     steps: Mapped[int | None] = mapped_column(Integer)
     raw: Mapped[dict | None] = mapped_column(JSON)
     synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class WhoopToken(Base):
+    """The single WHOOP connection (this is a one-user app).
+
+    WHOOP rotates refresh tokens: every refresh invalidates the previous pair,
+    so the newest tokens must always be saved straight away.
+    """
+
+    __tablename__ = "whoop_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    access_token: Mapped[str] = mapped_column(Text)
+    refresh_token: Mapped[str | None] = mapped_column(Text)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    scope: Mapped[str | None] = mapped_column(Text)
+    connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -37,6 +37,20 @@ export default function App() {
       .catch(() => setLoggedIn(false));
   }, []);
 
+  // Coming back from WHOOP's consent page: /?whoop=connected|denied|error
+  useEffect(() => {
+    const result = new URLSearchParams(window.location.search).get("whoop");
+    if (!result) return;
+    setToast(
+      result === "connected"
+        ? "WHOOP connected"
+        : result === "denied"
+          ? "WHOOP connection cancelled"
+          : "WHOOP connection failed; try again",
+    );
+    window.history.replaceState(null, "", "/");
+  }, []);
+
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 2500);

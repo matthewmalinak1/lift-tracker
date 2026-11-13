@@ -1,6 +1,6 @@
 """Request/response shapes for the API (Pydantic v2)."""
 
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -297,3 +297,19 @@ class CalendarMonth(BaseModel):
     days: list[CalendarDay]
     max_sets: int
     prs: int
+
+
+# --- WHOOP ------------------------------------------------------------------
+
+
+class WhoopStatus(BaseModel):
+    configured: bool  # client ID and secret are set in Vercel
+    connected: bool
+    last_sync_at: datetime | None
+    days_stored: int
+    first_day: date | None
+
+
+class WhoopSyncResult(BaseModel):
+    days_updated: int
+    synced_at: datetime

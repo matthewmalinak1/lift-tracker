@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { api, MUSCLE_LABELS, type BodyStatus, type Muscle, type WhoopToday } from "../api";
+import { api, MUSCLE_LABELS, type BodyStatus, type Muscle, type WhoopStatus, type WhoopToday } from "../api";
 import { BACK, FRONT, HEAD, OUTLINE_HALF, VIEW_H, VIEW_W, type MuscleShape } from "./bodyShapes";
 import Body3D, { canUse3D } from "./body3d/Body3D";
 
@@ -274,17 +274,95 @@ function Turntable({ status, selected, onSelect }: {
   );
 }
 
+const AUTO_SYNC_MINUTES = 30;
+
+function minutesAgo(iso: string) {
+  return Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+}
+
+function syncedLabel(iso: string | null) {
+  if (!iso) return "never";
+  const m = minutesAgo(iso);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  return h < 24 ? `${h} h ago` : `${Math.round(h / 24)} d ago`;
+}
+
+/** Connect button, or sync status once connected. Syncs on its own when the
+ * last sync is more than half an hour old. */
+function WhoopBar({ onSynced }: { onSynced: () => void }) {
+  const [st, setSt] = useState<WhoopStatus | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const sync = async () => {
+    setSyncing(true);
+    setError(null);
+    try {
+      await api.whoopSync();
+      setSt(await api.whoopStatus());
+      onSynced();
+    } catch (e) {
+      setError(String(e).includes("connect again") ? "WHOOP needs reconnecting." : "WHOOP sync failed.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  useEffect(() => {
+    api
+      .whoopStatus()
+      .then((s) => {
+        setSt(s);
+        if (s.connected && (!s.last_sync_at || minutesAgo(s.last_sync_at) > AUTO_SYNC_MINUTES)) sync();
+      })
+      .catch(() => setSt(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!st) return null;
+  if (!st.configured) {
+    return (
+      <p className="muted small center">
+        WHOOP isn't set up yet: add WHOOP_CLIENT_ID and WHOOP_CLIENT_SECRET in Vercel.
+      </p>
+    );
+  }
+  if (!st.connected || error === "WHOOP needs reconnecting.") {
+    return (
+      <a className="whoop-connect" href="/api/whoop/connect">
+        <span className="whoop-dot" /> {error ? "Reconnect WHOOP" : "Connect WHOOP"}
+      </a>
+    );
+  }
+  return (
+    <div className="whoop-bar">
+      <span className="whoop-dot on" />
+      <span className="muted small">
+        WHOOP · {syncing ? "syncing…" : `synced ${syncedLabel(st.last_sync_at)}`}
+        {st.days_stored > 0 && ` · ${st.days_stored} day${st.days_stored === 1 ? "" : "s"}`}
+      </span>
+      <button className="text-btn" onClick={sync} disabled={syncing}>
+        Sync
+      </button>
+      {error && <span className="error small">{error}</span>}
+    </div>
+  );
+}
+
 export default function Body() {
   const [status, setStatus] = useState<BodyStatus | null>(null);
   const [error, setError] = useState(false);
   const [selected, setSelected] = useState<Muscle | null>(null);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     api
       .body()
       .then(setStatus)
       .catch(() => setError(true));
-  }, []);
+  }, [reload]);
 
   const whoop = status?.whoop ?? null;
   const recovering = status
@@ -347,9 +425,7 @@ export default function Body() {
         </div>
       )}
 
-      {!whoop && (
-        <p className="muted small center">WHOOP stats appear once WHOOP is connected (Phase 2).</p>
-      )}
+      <WhoopBar onSynced={() => setReload((r) => r + 1)} />
       {error && <p className="muted small center">Couldn't load recovery data.</p>}
     </section>
   );

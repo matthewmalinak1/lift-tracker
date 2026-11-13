@@ -77,9 +77,10 @@ Copy `.env.example` to `.env` first; it holds the local login password (`dev-pas
 
 1. Import the repo at vercel.com/new. `vercel.json` already defines the build, the Python function and the routing.
 2. In the Vercel project, open **Storage → Create → Neon** (free). This sets `DATABASE_URL` automatically.
-3. In **Settings → Environment Variables**, add `APP_PASSWORD` (the login password) and `SESSION_SECRET` (a random string, e.g. from `python -c "import secrets; print(secrets.token_urlsafe(32))"`).
-4. Redeploy. Every push to `main` deploys again.
-5. On the phone, open the site and choose **Add to Home Screen**.
+3. For WHOOP: create an app at developer-dashboard.whoop.com with redirect URL `https://<your-domain>/api/whoop/callback`, scopes `offline read:recovery read:cycles read:sleep read:profile`, and privacy policy `https://<your-domain>/privacy.html`; add `WHOOP_CLIENT_ID` and `WHOOP_CLIENT_SECRET` in Vercel.
+4. In **Settings → Environment Variables**, add `APP_PASSWORD` (the login password) and `SESSION_SECRET` (a random string, e.g. from `python -c "import secrets; print(secrets.token_urlsafe(32))"`).
+5. Redeploy. Every push to `main` deploys again.
+6. On the phone, open the site and choose **Add to Home Screen**.
 
 ## Security
 
@@ -94,7 +95,7 @@ Single-user login, drawn as a 3×3 pattern (sent as its keypad digits, e.g. a Z 
 - [x] Import past workouts from an Excel template (`POST /api/import/xlsx`; preview with row-level errors, re-uploads never duplicate). The in-app button was removed after the one-time import.
 - [x] Calendar heat map (green by sets, split tags, PR stars) and Progress grouped by muscle
 - [ ] Offline set queue, DB-backed login lockout
-- [ ] **Phase 2:** WHOOP OAuth and daily sync (recovery, HRV, sleep, strain, steps)
+- [x] **Phase 2:** WHOOP OAuth 2.0 (signed state, rotating refresh tokens) and sync of recovery, HRV, resting HR, sleep, strain and steps into one row per day; syncs automatically when the app opens
 - [x] **Phase 3:** e1RM estimation and a Kalman filter with MLE-fitted noise and 95% bands ([math](docs/math/kalman-e1rm.md)); plateau detection; Lab tab
 - [ ] **Phase 4:** Bayesian readiness model
 - [ ] **Phase 5:** fitness-fatigue model and plateau detection
