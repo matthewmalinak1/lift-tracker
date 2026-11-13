@@ -1,270 +1,248 @@
 import * as THREE from "three";
-import { ALL_MUSCLES, type Muscle } from "../../api";
+import type { Muscle } from "../../api";
 
 /**
- * Procedural 3D mannequin for the hologram, built from lathe-turned body
- * parts (no model file to download). Every vertex carries a `muscle`
- * attribute: an index into ALL_MUSCLES, or -1 for skin with no muscle (head,
- * hands, shins). The shader colours each vertex from that muscle's fatigue.
+ * Procedural anatomy hologram (no model file to download).
  *
- * Units are roughly metres: the figure is ~1.8 tall with its feet at y = 0
- * and faces +z.
+ * Two layers:
+ *  - a slim, athletic "skin" made of lathe-turned parts, drawn faintly;
+ *  - the main muscles as separate sculpted shapes on top (pecs, delts,
+ *    biceps, six-pack, lats, quads…), each with its own material so it can be
+ *    coloured by its own fatigue and picked by tapping.
+ *
+ * Units are roughly metres: ~1.8 tall, feet at y = 0, facing +z.
  */
 
-export const MUSCLE_INDEX: Record<Muscle, number> = Object.fromEntries(
-  ALL_MUSCLES.map((m, i) => [m, i]),
-) as Record<Muscle, number>;
+export interface BodyParts {
+  root: THREE.Group;
+  muscles: THREE.Mesh[]; // userData.muscle holds the Muscle name
+}
 
-type Classifier = (p: THREE.Vector3, n: THREE.Vector3) => Muscle | null;
+type Mat = (m: Muscle) => THREE.Material;
 
-const NONE: Classifier = () => null;
-
-/** Lathe a radius profile [[r, y], …] (y ascending) around the Y axis. The
- * profile is smoothed through a spline and resampled densely, so the outline
- * has no corners and muscle boundaries land on fine rows. The seam sits at the
- * back so it never shows from the front. */
+/** Lathe a radius profile [[r, y], …] (y ascending), smoothed through a spline. */
 function lathe(profile: [number, number][], segments = 40, rows = 48): THREE.BufferGeometry {
   const curve = new THREE.SplineCurve(profile.map(([r, y]) => new THREE.Vector2(r, y)));
   const pts = curve.getSpacedPoints(rows).map((v) => new THREE.Vector2(Math.max(v.x, 0.0005), v.y));
   return new THREE.LatheGeometry(pts, segments, Math.PI, Math.PI * 2);
 }
 
-/** Tag every vertex with its muscle using the classifier (in part-local space),
- * and add per-vertex `fatigue` and `selected` attributes that the app fills in
- * (see paintBody). Per-vertex values interpolate smoothly across triangles,
- * so boundaries between muscles blend instead of showing jagged edges. */
-function tag(geo: THREE.BufferGeometry, classify: Classifier): THREE.BufferGeometry {
-  const pos = geo.getAttribute("position");
-  const nor = geo.getAttribute("normal");
-  const ids = new Float32Array(pos.count);
-  const p = new THREE.Vector3();
-  const n = new THREE.Vector3();
-  for (let i = 0; i < pos.count; i++) {
-    p.fromBufferAttribute(pos, i);
-    n.fromBufferAttribute(nor, i).normalize();
-    const m = classify(p, n);
-    ids[i] = m === null ? -1 : MUSCLE_INDEX[m];
-  }
-  geo.setAttribute("muscle", new THREE.BufferAttribute(ids, 1));
-  geo.setAttribute("fatigue", new THREE.BufferAttribute(new Float32Array(pos.count), 1));
-  geo.setAttribute("selected", new THREE.BufferAttribute(new Float32Array(pos.count), 1));
-  return geo;
+/** An ellipsoid muscle belly: radii (rx, ry, rz), centre, rotation (radians). */
+function belly(
+  r: [number, number, number],
+  at: [number, number, number],
+  rot: [number, number, number] = [0, 0, 0],
+): THREE.BufferGeometry {
+  const g = new THREE.SphereGeometry(1, 28, 20);
+  g.scale(...r);
+  g.rotateX(rot[0]);
+  g.rotateY(rot[1]);
+  g.rotateZ(rot[2]);
+  g.translate(...at);
+  return g;
 }
 
-/** Write each muscle's fatigue (0-1) and the selection into the vertex attributes. */
-export function paintBody(meshes: THREE.Mesh[], fatigue: number[], selected: number) {
-  for (const mesh of meshes) {
-    const geo = mesh.geometry;
-    const ids = geo.getAttribute("muscle") as THREE.BufferAttribute;
-    const fat = geo.getAttribute("fatigue") as THREE.BufferAttribute;
-    const sel = geo.getAttribute("selected") as THREE.BufferAttribute;
-    for (let i = 0; i < ids.count; i++) {
-      const m = ids.getX(i);
-      fat.setX(i, m >= 0 ? fatigue[m] : -1);
-      sel.setX(i, m >= 0 && m === selected ? 1 : 0);
-    }
-    fat.needsUpdate = true;
-    sel.needsUpdate = true;
-  }
-}
+// Writes depth only. Drawn first, a slightly shrunken copy of the skin hides
+// muscles on the far side of the body, while muscles sitting on the near
+// surface still show (they're outside the shrunken copy).
+const occluderMat = new THREE.MeshBasicMaterial({ colorWrite: false });
 
-// --- Classifiers (part-local coordinates; +z is the front of the body) -------
-
-const torso: Classifier = (p, n) => {
-  const ax = Math.abs(p.x);
-  const y = p.y;
-  const front = n.z > 0.2;
-  const back = n.z < -0.2;
-  if (y > 1.425 && ax < 0.15) return "traps"; // slope from neck to shoulders
-  if (front) {
-    if (y >= 1.26 && y <= 1.425 && ax < 0.168) return "chest";
-    if (y >= 1.03 && y < 1.26) return ax < 0.072 ? "abs" : "obliques";
-    return null;
-  }
-  if (back) {
-    if (y >= 1.32 && ax < 0.125) return "traps";
-    if (y >= 1.1) return "lats";
-    if (y >= 1.02) return "lower_back";
-    return "glutes";
-  }
-  // Sides of the trunk
-  if (y >= 1.12 && y <= 1.38) return "lats";
-  if (y >= 1.03 && y < 1.12) return "obliques";
-  return null;
-};
-
-const neck: Classifier = (_p, n) => (n.z < -0.1 ? "traps" : null);
-const shoulderCap: Classifier = () => "shoulders";
-const upperArm: Classifier = (p, n) => {
-  if (p.y > -0.055) return "shoulders";
-  return n.z >= -0.05 ? "biceps" : "triceps";
-};
-const forearm: Classifier = () => "forearms";
-const thigh: Classifier = (p, n) => {
-  if (p.y > -0.07 && n.z < -0.2) return "glutes";
-  return n.z > -0.3 ? "quads" : "hamstrings";
-};
-const lowerLeg: Classifier = (p, n) => (n.z < 0.25 && p.y < -0.03 && p.y > -0.36 ? "calves" : null);
-
-// --- Parts -------------------------------------------------------------------
-
-export interface BodyParts {
-  root: THREE.Group;
-  meshes: THREE.Mesh[]; // muscle-tagged surfaces (raycast targets)
-}
-
-export function buildBody(material: THREE.Material, wire: THREE.Material): BodyParts {
+export function buildBody(skinMat: THREE.Material, wireMat: THREE.Material, muscleMat: Mat): BodyParts {
   const root = new THREE.Group();
-  const meshes: THREE.Mesh[] = [];
+  const muscles: THREE.Mesh[] = [];
 
-  const add = (geo: THREE.BufferGeometry, parent: THREE.Object3D, classify: Classifier) => {
-    tag(geo, classify);
-    const mesh = new THREE.Mesh(geo, material);
-    mesh.renderOrder = 1;
-    parent.add(mesh);
-    meshes.push(mesh);
-    const w = new THREE.Mesh(geo, wire);
-    w.renderOrder = 0;
+  /** `inset`: shrink factor for the occluder around the part's own axis
+   * (lathe parts are centred on it); 1 = no shrink. */
+  const skin = (geo: THREE.BufferGeometry, parent: THREE.Object3D, inset = 0.86) => {
+    const occ = new THREE.Mesh(geo.clone().scale(inset, 1, inset), occluderMat);
+    occ.renderOrder = -2;
+    parent.add(occ);
+    const w = new THREE.Mesh(geo, wireMat);
+    w.renderOrder = -1;
     parent.add(w);
-    return mesh;
+    parent.add(new THREE.Mesh(geo, skinMat));
+  };
+  const muscle = (m: Muscle, geo: THREE.BufferGeometry, parent: THREE.Object3D) => {
+    const mesh = new THREE.Mesh(geo, muscleMat(m));
+    mesh.userData.muscle = m;
+    mesh.renderOrder = 2;
+    parent.add(mesh);
+    muscles.push(mesh);
   };
 
-  // Torso: crotch to neck base, flattened front-to-back.
-  const torsoGeo = lathe(
+  // ---------------------------------------------------------------- skin
+  // V-taper torso: broad chest and lats, narrow waist.
+  const torso = lathe(
     [
-      [0.0, 0.9],
-      [0.1, 0.905],
-      [0.15, 0.93],
-      [0.17, 0.98],
-      [0.168, 1.04],
-      [0.15, 1.1],
-      [0.138, 1.15],
-      [0.142, 1.2],
-      [0.155, 1.26],
-      [0.17, 1.32],
-      [0.18, 1.38],
-      [0.176, 1.42],
-      [0.14, 1.452],
-      [0.075, 1.472],
-      [0.055, 1.48],
+      [0.0, 0.88],
+      [0.09, 0.885],
+      [0.125, 0.92],
+      [0.137, 0.97],
+      [0.129, 1.03],
+      [0.115, 1.1],
+      [0.112, 1.15],
+      [0.13, 1.22],
+      [0.152, 1.29],
+      [0.168, 1.35],
+      [0.172, 1.4],
+      [0.16, 1.435],
+      [0.11, 1.46],
+      [0.055, 1.475],
+      [0.048, 1.48],
     ],
     56,
     90,
   );
-  torsoGeo.scale(1, 1, 0.62);
-  add(torsoGeo, root, torso);
+  torso.scale(1, 1, 0.56);
+  skin(torso, root);
 
-  // Neck and head
-  const neckGeo = new THREE.CylinderGeometry(0.05, 0.056, 0.12, 24, 3, true);
-  neckGeo.translate(0, 1.52, -0.005);
-  add(neckGeo, root, neck);
+  const neck = new THREE.CylinderGeometry(0.045, 0.052, 0.12, 24, 3, true);
+  neck.translate(0, 1.525, -0.005);
+  skin(neck, root, 0.8);
 
-  const headGeo = new THREE.SphereGeometry(0.1, 32, 24);
-  headGeo.scale(0.95, 1.2, 1.05);
-  headGeo.translate(0, 1.665, 0.005);
-  add(headGeo, root, NONE);
+  const head = new THREE.SphereGeometry(0.095, 32, 24);
+  head.scale(0.92, 1.22, 1.04);
+  head.translate(0, 1.668, 0.006);
+  skin(head, root, 1);
 
-  for (const side of [-1, 1]) {
-    // Shoulder cap
-    const cap = new THREE.SphereGeometry(0.066, 24, 16);
-    cap.scale(1, 0.95, 0.88);
-    cap.translate(side * 0.186, 1.405, 0);
-    add(cap, root, shoulderCap);
+  // ---------------------------------------------------------------- trunk muscles
+  for (const s of [-1, 1]) {
+    // Pecs: broad, flat, angled up toward the shoulder
+    muscle("chest", belly([0.078, 0.052, 0.026], [s * 0.068, 1.335, 0.074], [0.15, s * 0.42, s * 0.22]), root);
+    // Obliques: along the sides of the waist
+    muscle("obliques", belly([0.026, 0.07, 0.03], [s * 0.098, 1.125, 0.035], [0, s * 0.6, s * -0.12]), root);
+    // Lats: wings from armpit down toward the waist
+    muscle("lats", belly([0.062, 0.135, 0.028], [s * 0.098, 1.25, -0.056], [0, s * -0.45, s * -0.32]), root);
+    // Lower back: two erector columns
+    muscle("lower_back", belly([0.024, 0.072, 0.02], [s * 0.03, 1.08, -0.062], [0.12, 0, 0]), root);
+    // Glutes
+    muscle("glutes", belly([0.064, 0.07, 0.048], [s * 0.06, 0.955, -0.054]), root);
+    // Upper traps: slopes from neck to shoulders
+    muscle("traps", belly([0.07, 0.026, 0.036], [s * 0.075, 1.452, -0.018], [0, 0, s * -0.38]), root);
 
-    // Arm hangs from the shoulder, slightly away from the body.
+    // Six-pack: three blocks per side, plus a lower block
+    for (const [i, y] of [1.235, 1.175, 1.115].entries()) {
+      muscle("abs", belly([0.026, 0.025 - i * 0.001, 0.012], [s * 0.029, y, 0.066]), root);
+    }
+    muscle("abs", belly([0.022, 0.035, 0.011], [s * 0.026, 1.045, 0.071]), root);
+  }
+  // Mid/lower traps: diamond on the upper back
+  muscle("traps", belly([0.075, 0.12, 0.02], [0, 1.35, -0.082], [0.12, 0, Math.PI / 4]), root);
+
+  // ---------------------------------------------------------------- limbs
+  for (const s of [-1, 1]) {
+    // Delts: rounded cap over the shoulder joint
+    muscle("shoulders", belly([0.056, 0.066, 0.058], [s * 0.192, 1.392, 0], [0, 0, s * -0.25]), root);
+
     const shoulder = new THREE.Group();
-    shoulder.position.set(side * 0.212, 1.425, 0);
-    shoulder.rotation.z = side * 0.11;
+    shoulder.position.set(s * 0.2, 1.41, 0);
+    shoulder.rotation.z = s * 0.13;
     root.add(shoulder);
 
-    const upper = lathe(
-      [
-        [0.0, -0.3],
-        [0.038, -0.292],
-        [0.041, -0.27],
-        [0.047, -0.2],
-        [0.052, -0.14],
-        [0.055, -0.07],
-        [0.05, -0.012],
-        [0.0, 0.0],
-      ],
-      28,
+    skin(
+      lathe(
+        [
+          [0.0, -0.3],
+          [0.034, -0.29],
+          [0.036, -0.26],
+          [0.041, -0.18],
+          [0.045, -0.1],
+          [0.044, -0.04],
+          [0.03, -0.01],
+          [0.0, 0.0],
+        ],
+        28,
+      ),
+      shoulder,
     );
-    upper.scale(1, 1, 0.92);
-    add(upper, shoulder, upperArm);
+    muscle("biceps", belly([0.033, 0.09, 0.032], [0, -0.165, 0.024]), shoulder);
+    muscle("triceps", belly([0.035, 0.1, 0.031], [0, -0.155, -0.026]), shoulder);
 
     const elbow = new THREE.Group();
     elbow.position.y = -0.295;
-    elbow.rotation.x = -0.12;
+    elbow.rotation.x = -0.14;
     shoulder.add(elbow);
-
-    const fore = lathe(
-      [
-        [0.0, -0.262],
-        [0.027, -0.255],
-        [0.031, -0.21],
-        [0.037, -0.15],
-        [0.044, -0.06],
-        [0.041, -0.015],
-        [0.0, 0.0],
-      ],
-      28,
+    skin(
+      lathe(
+        [
+          [0.0, -0.262],
+          [0.022, -0.255],
+          [0.025, -0.21],
+          [0.032, -0.14],
+          [0.038, -0.06],
+          [0.035, -0.015],
+          [0.0, 0.0],
+        ],
+        28,
+      ),
+      elbow,
     );
-    fore.scale(1, 1, 0.85);
-    add(fore, elbow, forearm);
+    muscle("forearms", belly([0.036, 0.1, 0.032], [s * 0.003, -0.085, 0.008]), elbow);
 
-    const hand = new THREE.SphereGeometry(0.038, 16, 12);
-    hand.scale(0.75, 1.25, 0.5);
+    const hand = new THREE.SphereGeometry(0.034, 16, 12);
+    hand.scale(0.75, 1.3, 0.5);
     hand.translate(0, -0.3, 0);
-    add(hand, elbow, NONE);
+    skin(hand, elbow, 1);
 
-    // Leg
+    // Legs
     const hip = new THREE.Group();
-    hip.position.set(side * 0.088, 0.955, 0);
-    hip.rotation.z = side * 0.025;
+    hip.position.set(s * 0.082, 0.94, 0);
+    hip.rotation.z = s * 0.022;
     root.add(hip);
-
-    const thighGeo = lathe(
-      [
-        [0.0, -0.45],
-        [0.05, -0.443],
-        [0.054, -0.41],
-        [0.066, -0.32],
-        [0.08, -0.2],
-        [0.09, -0.08],
-        [0.088, -0.02],
-        [0.0, 0.0],
-      ],
-      32,
+    skin(
+      lathe(
+        [
+          [0.0, -0.45],
+          [0.042, -0.443],
+          [0.046, -0.41],
+          [0.058, -0.32],
+          [0.07, -0.2],
+          [0.078, -0.09],
+          [0.075, 0.0],
+          [0.055, 0.035],
+          [0.0, 0.045],
+        ],
+        32,
+      ),
+      hip,
     );
-    thighGeo.scale(1, 1, 0.95);
-    add(thighGeo, hip, thigh);
+    // Quads: rectus femoris down the middle, vastus lateralis outside,
+    // teardrop vastus medialis above the knee on the inside.
+    muscle("quads", belly([0.034, 0.16, 0.03], [0, -0.2, 0.04], [0.05, 0, 0]), hip);
+    muscle("quads", belly([0.032, 0.15, 0.032], [s * 0.04, -0.21, 0.016], [0, 0, s * 0.05]), hip);
+    muscle("quads", belly([0.028, 0.06, 0.026], [s * -0.03, -0.355, 0.03]), hip);
+    // Hamstrings: two columns down the back of the thigh
+    muscle("hamstrings", belly([0.03, 0.155, 0.03], [s * 0.022, -0.22, -0.042]), hip);
+    muscle("hamstrings", belly([0.026, 0.145, 0.028], [s * -0.024, -0.23, -0.038]), hip);
 
     const knee = new THREE.Group();
     knee.position.y = -0.448;
     hip.add(knee);
-
-    const shin = lathe(
-      [
-        [0.0, -0.43],
-        [0.03, -0.425],
-        [0.032, -0.38],
-        [0.045, -0.25],
-        [0.057, -0.14],
-        [0.056, -0.09],
-        [0.05, -0.015],
-        [0.0, 0.0],
-      ],
-      28,
+    skin(
+      lathe(
+        [
+          [0.0, -0.43],
+          [0.026, -0.425],
+          [0.028, -0.38],
+          [0.036, -0.27],
+          [0.046, -0.15],
+          [0.046, -0.08],
+          [0.042, -0.015],
+          [0.0, 0.0],
+        ],
+        28,
+      ),
+      knee,
     );
-    shin.scale(1, 1, 0.95);
-    add(shin, knee, lowerLeg);
+    // Calves: the two heads of the gastrocnemius
+    muscle("calves", belly([0.03, 0.085, 0.03], [s * 0.017, -0.135, -0.032]), knee);
+    muscle("calves", belly([0.027, 0.075, 0.027], [s * -0.017, -0.125, -0.03]), knee);
 
-    const foot = new THREE.SphereGeometry(0.05, 16, 12);
+    const foot = new THREE.SphereGeometry(0.045, 16, 12);
     foot.scale(0.8, 0.55, 2.1);
     foot.translate(0, -0.45, 0.045);
-    add(foot, knee, NONE);
+    skin(foot, knee, 1);
   }
 
-  return { root, meshes };
+  return { root, muscles };
 }

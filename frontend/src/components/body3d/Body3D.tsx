@@ -1,19 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { ALL_MUSCLES, type BodyStatus, type Muscle } from "../../api";
-import { buildBody, MUSCLE_INDEX, paintBody } from "./model";
+import { buildBody } from "./model";
 
 const VERT = /* glsl */ `
-  attribute float fatigue;   // 0-1, or -1 for skin with no muscle
-  attribute float selected;  // 1 on the tapped muscle
-  varying float vFatigue;
-  varying float vSelected;
+  varying vec2 vUv;
   varying vec3 vNormalV;
   varying vec3 vViewDir;
   varying float vY;
   void main() {
-    vFatigue = fatigue;
-    vSelected = selected;
+    vUv = uv;
     vec4 world = modelMatrix * vec4(position, 1.0);
     vY = world.y;
     vec4 mv = viewMatrix * world;
@@ -24,33 +20,36 @@ const VERT = /* glsl */ `
 `;
 
 // Hologram look: colour from the muscle's fatigue (blue -> red), a Fresnel rim
-// glow on edges facing away from the camera, faint scan lines, and a bright
-// band sweeping up the body.
+// glow where the surface turns away from the camera, and a bright band
+// sweeping up the body. uFatigue < 0 draws the faint skin layer.
 const FRAG = /* glsl */ `
+  uniform float uFatigue;
+  uniform float uSelected;
   uniform float uTime;
-  varying float vFatigue;
-  varying float vSelected;
+  varying vec2 vUv;
   varying vec3 vNormalV;
   varying vec3 vViewDir;
   varying float vY;
   void main() {
-    float muscle = clamp(vFatigue + 1.0, 0.0, 1.0);  // 0 on bare skin, 1 on muscle
-    float f = max(vFatigue, 0.0);
+    bool skin = uFatigue < 0.0;
+    // Muscle fibres: on an ellipsoid stretched along its long axis, lines of
+    // constant u run the length of the muscle, like striations.
+    float fibre = 0.5 + 0.5 * sin(vUv.x * 6.2832 * 22.0);
+    float f = max(uFatigue, 0.0);
     vec3 blue = vec3(0.486, 0.769, 1.0);
-    vec3 red = vec3(1.0, 0.30, 0.37);
+    vec3 red = vec3(1.0, 0.28, 0.35);
     vec3 col = mix(blue, red, f);
 
     float facing = abs(dot(normalize(vNormalV), normalize(vViewDir)));
     float rim = pow(1.0 - facing, 2.0);
     float sweepY = mod(uTime * 0.35, 2.4) - 0.3;
     float sweep = 1.0 - smoothstep(0.0, 0.07, abs(vY - sweepY));
-    float sel = vSelected;
 
-    float a = mix(0.035, 0.07 + 0.5 * f, muscle)
-            + rim * 0.7
-            + sweep * 0.18
-            + sel * 0.3;
-    vec3 c = col * (0.55 + rim * 0.9 + sel * 0.5) + sweep * 0.15;
+    float a = skin
+      ? 0.02 + rim * 0.38 + sweep * 0.1
+      : 0.14 + 0.5 * f + rim * 0.75 + sweep * 0.2 + uSelected * 0.35;
+    vec3 c = col * (skin ? 0.6 + rim * 0.6 : 0.55 + 0.3 * fibre + rim * 0.9 + uSelected * 0.6)
+           + sweep * 0.12;
     gl_FragColor = vec4(c, clamp(a, 0.0, 1.0));
   }
 `;
@@ -80,18 +79,21 @@ export default function Body3D({
   onSelect: (m: Muscle | null) => void;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const uniforms = useRef({ uTime: { value: 0 } });
-  const meshesRef = useRef<THREE.Mesh[]>([]);
+  const time = useRef({ value: 0 });
+  // One material per muscle, so each can be coloured by its own fatigue.
+  const mats = useRef<Map<Muscle, THREE.ShaderMaterial>>(new Map());
   const [hinted, setHinted] = useState(false);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
 
-  // Repaint the body whenever recovery data or the selected muscle changes.
+  // Recolour whenever recovery data or the selected muscle changes.
   const paint = () => {
-    const fatigue = ALL_MUSCLES.map((m) => status?.muscles[m]?.fatigue ?? 0);
-    paintBody(meshesRef.current, fatigue, selected ? MUSCLE_INDEX[selected] : -1);
+    for (const [m, mat] of mats.current) {
+      mat.uniforms.uFatigue.value = status?.muscles[m]?.fatigue ?? 0;
+      mat.uniforms.uSelected.value = m === selected ? 1 : 0;
+    }
   };
   const paintRef = useRef(paint);
   paintRef.current = paint;
@@ -110,26 +112,29 @@ export default function Body3D({
     camera.position.set(0, 1.12, 4.1);
     camera.lookAt(0, 0.9, 0);
 
-    const material = new THREE.ShaderMaterial({
-      vertexShader: VERT,
-      fragmentShader: FRAG,
-      uniforms: uniforms.current,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      side: THREE.FrontSide,
-    });
+    const shader = (fatigue: number) =>
+      new THREE.ShaderMaterial({
+        vertexShader: VERT,
+        fragmentShader: FRAG,
+        uniforms: { uFatigue: { value: fatigue }, uSelected: { value: 0 }, uTime: time.current },
+        transparent: true,
+        depthWrite: false,
+        depthTest: true,
+        blending: THREE.AdditiveBlending,
+        side: THREE.FrontSide,
+      });
+    const skinMat = shader(-1);
+    mats.current = new Map(ALL_MUSCLES.map((m) => [m, shader(0)]));
     const wire = new THREE.MeshBasicMaterial({
       color: 0x7cc4ff,
       wireframe: true,
       transparent: true,
-      opacity: 0.045,
+      opacity: 0.03,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     });
 
-    const { root, meshes } = buildBody(material, wire);
-    meshesRef.current = meshes;
+    const { root, muscles } = buildBody(skinMat, wire, (m) => mats.current.get(m)!);
     paintRef.current();
     scene.add(root);
 
@@ -214,15 +219,12 @@ export default function Body3D({
         -((e.clientY - rect.top) / rect.height) * 2 + 1,
       );
       raycaster.setFromCamera(ndc, camera);
-      const hit = raycaster
-        .intersectObjects(meshes, false)
-        .find((h) => h.face && (h.object as THREE.Mesh).geometry.getAttribute("muscle").getX(h.face.a) >= 0);
-      if (!hit || !hit.face) {
+      const hit = raycaster.intersectObjects(muscles, false)[0];
+      if (!hit) {
         onSelectRef.current(null);
         return;
       }
-      const idx = (hit.object as THREE.Mesh).geometry.getAttribute("muscle").getX(hit.face.a);
-      const m = ALL_MUSCLES[Math.round(idx)];
+      const m = hit.object.userData.muscle as Muscle;
       onSelectRef.current(m === selectedRef.current ? null : m);
     };
     el.addEventListener("pointerdown", down);
@@ -243,7 +245,7 @@ export default function Body3D({
       }
       root.rotation.y = yaw;
       rings.rotation.y = -yaw * 0.3;
-      uniforms.current.uTime.value = (now - start) / 1000;
+      time.current.value = (now - start) / 1000;
       renderer.render(scene, camera);
       raf = requestAnimationFrame(frame);
     };

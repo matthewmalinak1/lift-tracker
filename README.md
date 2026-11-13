@@ -88,7 +88,7 @@ Single-user login, drawn as a 3×3 pattern (sent as its keypad digits, e.g. a Z 
 ## Roadmap
 
 - [x] **Phase 0:** scaffold, data model, CI, deploy pipeline, installable app shell
-- [x] **Home screen:** 3D holographic body (three.js, procedural mannequin, custom Fresnel shader, per-vertex muscle shading, drag to spin with momentum, tap a muscle; 2D fallback without WebGL); muscles shade red after training and fade over 3 days ([math](docs/math/muscle-recovery.md)); WHOOP stat panels
+- [x] **Home screen:** 3D anatomy hologram (three.js; slim procedural body with the main muscles sculpted as separate meshes, depth-only occluder so far-side muscles hide, custom Fresnel/fibre shader, drag to spin with momentum, tap a muscle; 2D fallback without WebGL); muscles shade red after training and fade over 3 days ([math](docs/math/muscle-recovery.md)); WHOOP stat panels
 - [x] **Phase 1:** workout logging (+ Log button, last-time numbers, most-recovered split suggestion, draft saved on device), exercise library with muscle tags, green-day calendar with day detail and PRs, pattern-lock login
 - [x] Walk-forward backtest of the strength filter on real history: band coverage, band width, error vs a naive forecast (Lab tab)
 - [x] Import past workouts from an Excel template (`POST /api/import/xlsx`; preview with row-level errors, re-uploads never duplicate). The in-app button was removed after the one-time import.
