@@ -153,6 +153,7 @@ export const api = {
   volume: (weeks = 4) => get<VolumeWeek[]>(`/api/progress/volume?today=${today()}&weeks=${weeks}`),
   lab: () => get<Lab>(`/api/lab?today=${today()}`),
   backtest: () => get<Backtest>("/api/lab/backtest"),
+  readiness: () => get<Readiness>(`/api/lab/readiness?today=${today()}`),
   whoopStatus: () => get<WhoopStatus>("/api/whoop/status"),
   weight: (days = 90) => get<WeightSummary>(`/api/weight?days=${days}&today=${today()}`),
   logWeight: (date: string, weight: number) =>
@@ -362,6 +363,34 @@ export interface Backtest {
   level_only_mae_pct: number | null;
   improvement_pct: number | null;
   per_lift: BacktestLift[];
+}
+
+// --- Readiness ----------------------------------------------------------------
+
+export interface ReadinessEffect {
+  key: string;
+  label: string;
+  unit: string;
+  sd_raw: number;
+  mean: number;
+  lo90: number;
+  hi90: number;
+  p_positive: number;
+  prior_sd: number;
+}
+
+export interface Readiness {
+  status: "collecting" | "live";
+  days: number;
+  days_min: number;
+  days_target: number;
+  sessions: number;
+  effects: ReadinessEffect[];
+  intercept: number | null;
+  intercept_lo90: number | null;
+  intercept_hi90: number | null;
+  noise_sd: number | null;
+  today: { date: string; expected: number; lo90: number; hi90: number } | null;
 }
 
 // --- Calendar month ---------------------------------------------------------

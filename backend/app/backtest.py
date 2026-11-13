@@ -24,6 +24,7 @@ both the state uncertainty carried forward dt days and the session noise r.
 
 import math
 from dataclasses import dataclass
+from datetime import date
 
 from .strength import (
     SLOPE_PRIOR_SD,
@@ -51,6 +52,7 @@ class Prediction:
     sd: float
     naive: float
     level_only: float  # random-walk filter's forecast, as a benchmark
+    day: date | None = None  # date of the predicted session
 
     @property
     def covered(self) -> bool:
@@ -97,7 +99,9 @@ def walk_forward(exercise_id: int, obs: list[Obs]) -> list[Prediction]:
 
         rw_mean, _ = filtered_last(history, q, r)
         preds.append(
-            Prediction(exercise_id, obs[t].value, mean, sd, history[-1].value, rw_mean)
+            Prediction(
+                exercise_id, obs[t].value, mean, sd, history[-1].value, rw_mean, obs[t].day
+            )
         )
     return preds
 

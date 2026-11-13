@@ -2005,3 +2005,68 @@ main {
   font-size: 0.85rem;
   text-decoration: none;
 }
+
+/* --- Readiness model card --- */
+.rd-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0;
+}
+.rd-row {
+  display: grid;
+  grid-template-columns: 76px 1fr 84px;
+  align-items: center;
+  gap: 10px;
+}
+.rd-label,
+.rd-num {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.rd-num {
+  text-align: right;
+  white-space: nowrap;
+}
+.rd-axis {
+  position: relative;
+  height: 18px;
+}
+.rd-axis::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--border);
+}
+.rd-zero {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--muted);
+  opacity: 0.6;
+}
+.rd-range {
+  position: absolute;
+  top: 50%;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 3px;
+  background: var(--accent);
+  opacity: 0.35;
+}
+.rd-dot {
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface);
+}

@@ -6,7 +6,7 @@ This folder documents every model in the app: the assumptions, the equations, an
 |---|---|---|---|
 | 1 | [Estimated 1RM](#1-estimated-1rm-e1rm) | What does a set of *w* × *r* imply about max strength? | **Live** |
 | 2 | [Kalman filter](kalman-e1rm.md) | What is my *true* strength today, and how sure are we? | **Live** (full write-up linked) |
-| 3 | [Bayesian readiness model](#3-bayesian-readiness-model) | How much do recovery, HRV and sleep move performance? | Planned (Phase 4) |
+| 3 | [Bayesian readiness model](#3-bayesian-readiness-model) | How much do recovery, HRV and sleep move performance? | **Live**, early estimates ([write-up](readiness.md)) |
 | 4 | [Fitness-fatigue model](#4-fitness-fatigue-model) | How do training load, fitness and fatigue add up over time? | Planned (Phase 5) |
 | 5 | [Muscle recovery heat map](muscle-recovery.md) | Which muscles are still recovering, and how much? | **v1 live** |
 
@@ -43,16 +43,15 @@ $$
 
 ## 3. Bayesian readiness model
 
-How far a session lands above or below the Kalman baseline, explained by that morning's WHOOP data:
+**Live** (full write-up: [readiness.md](readiness.md)). How far a lifting day lands above or below the trend filter's forecast, explained by that morning's WHOOP data:
 
 $$
-\frac{y_{t} - \hat{x}_{t|t-1}}{\hat{x}_{t|t-1}} \;=\; \alpha_{\text{lift}} + \beta_{\text{rec}}\, z(\text{recovery}_t) + \beta_{\text{hrv}}\, z(\text{HRV}_t) + \beta_{\text{sleep}}\, z(\text{sleep}_t) + \varepsilon
+y_d = \alpha + \beta_{\text{rec}}\, z(\text{recovery}_d) + \beta_{\text{hrv}}\, z(\text{HRV}_d) + \beta_{\text{sleep}}\, z(\text{sleep}_d) + \varepsilon_d
 $$
 
-- Each lift gets its own intercept, partially pooled across lifts (hierarchical).
-- Weakly informative priors centred on zero effect, so the data has to earn any conclusion.
-- Reported as posterior distributions, e.g. "a 1-SD drop in HRV costs 1.2% of e1RM (90% CI 0.3–2.1%)".
-- Fitted with PyMC in a scheduled job; needs a few months of paired lifting and WHOOP data.
+- $y_d$ is the average % surprise across that day's lifts, against walk-forward (no look-ahead) forecasts.
+- Skeptical priors centred on zero effect (SD ~1% per SD of input), so the data has to earn any conclusion.
+- Conjugate normal-inverse-gamma posterior in closed form, reported as means, 90% intervals and P(effect > 0).
 
 ## 4. Fitness-fatigue model
 

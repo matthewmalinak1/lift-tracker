@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type Lab } from "../api";
 import BacktestCard from "./BacktestCard";
+import ReadinessCard from "./ReadinessCard";
 import { TrendBadge } from "./Progress";
 
 const REPO = "https://github.com/matthewmalinak1/lift-tracker/blob/main/";
@@ -25,8 +26,9 @@ export default function LabView() {
       </p>
 
       <BacktestCard />
+      <ReadinessCard />
 
-      {lab.models.map((m) => (
+      {lab.models.filter((m) => m.key !== "readiness").map((m) => (
         <article key={m.key} className="card model-card">
           <div className="model-head">
             <h3>{m.name}</h3>

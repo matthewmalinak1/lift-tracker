@@ -304,6 +304,39 @@ class Backtest(BaseModel):
     per_lift: list[BacktestLift]
 
 
+class ReadinessEffect(BaseModel):
+    key: str
+    label: str
+    unit: str
+    sd_raw: float  # 1 SD of the raw input (e.g. 12 ms of HRV)
+    mean: float  # % strength per 1 SD of the input
+    lo90: float
+    hi90: float
+    p_positive: float
+    prior_sd: float
+
+
+class ReadinessToday(BaseModel):
+    date: date
+    expected: float  # % above/below your trend
+    lo90: float
+    hi90: float
+
+
+class Readiness(BaseModel):
+    status: str  # "collecting" | "live"
+    days: int  # lifting days with WHOOP data used in the fit
+    days_min: int  # needed for a first (wide) estimate
+    days_target: int  # where the estimates start to firm up
+    sessions: int
+    effects: list[ReadinessEffect]
+    intercept: float | None
+    intercept_lo90: float | None
+    intercept_hi90: float | None
+    noise_sd: float | None
+    today: ReadinessToday | None
+
+
 # --- Calendar month view -----------------------------------------------------
 
 

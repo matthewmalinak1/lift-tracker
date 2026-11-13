@@ -8,10 +8,20 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import backtest as bt
+from .. import readiness as rd
 from ..db import get_session
 from ..models import Exercise, WhoopDaily, Workout
 from ..queries import all_sets, session_bests
-from ..schemas import Backtest, BacktestLift, Lab, LabModel, PlateauRow
+from ..schemas import (
+    Backtest,
+    BacktestLift,
+    Lab,
+    LabModel,
+    PlateauRow,
+    Readiness,
+    ReadinessEffect,
+    ReadinessToday,
+)
 from ..strength import MIN_OBS_TO_FIT, PLATEAU_MIN_SESSIONS, fit_trend_kalman, trend
 from .body import muscle_states_for
 from .progress import trend_out
@@ -20,6 +30,35 @@ router = APIRouter()
 
 READINESS_SESSIONS_NEEDED = 40  # lifting days with same-day WHOOP data
 FITNESS_FATIGUE_DAYS_NEEDED = 56  # 8 weeks of history
+
+
+_WHOOP_COLS = [k for k, _, _ in rd.FACTORS]
+
+
+def readiness_fit(session: Session) -> rd.Fit | None:
+    """Fit the readiness model on every lifting day that has WHOOP data.
+
+    Each day's outcome is the average % surprise across that day's lifts,
+    against the trend filter's walk-forward (no look-ahead) forecasts.
+    """
+    bests = session_bests(all_sets(session))
+    by_day: dict[date, list[float]] = {}
+    for ex_id, obs in bests.items():
+        for p in bt.walk_forward(ex_id, obs):
+            if p.day is not None:
+                by_day.setdefault(p.day, []).append(100 * (p.actual - p.predicted) / p.predicted)
+
+    whoop = {
+        w.date: {k: getattr(w, k) for k in _WHOOP_COLS}
+        for w in session.scalars(select(WhoopDaily))
+    }
+    base = rd.baseline(list(whoop.values()))
+    days = [
+        rd.Day(d, sum(v) / len(v), len(v), whoop[d])
+        for d, v in sorted(by_day.items())
+        if d in whoop
+    ]
+    return rd.fit(days, base)
 
 
 @router.get("/lab", response_model=Lab)
@@ -63,6 +102,17 @@ def lab(today: date | None = Query(default=None), session: Session = Depends(get
     recovering = sum(s.fatigue > 0 for s in muscle_states_for(session, today).values())
 
     # 4. Readiness model needs lifting days that also have WHOOP data.
+    rfit = readiness_fit(session)
+    if rfit:
+        top = max(rfit.effects, key=lambda e: abs(e.p_positive - 0.5))
+        direction = "helps" if top.mean > 0 else "hurts"
+        readiness_head = (
+            f"First estimates from {rfit.days} days: strongest signal is {top.label} "
+            f"({top.mean:+.1f}% per SD, {max(top.p_positive, 1 - top.p_positive):.0%} chance it "
+            f"{direction}). Ranges are wide until ~{READINESS_SESSIONS_NEEDED} days."
+        )
+    else:
+        readiness_head = None
     paired = session.scalar(
         select(func.count(func.distinct(Workout.date)))
         .join(WhoopDaily, WhoopDaily.date == Workout.date)
@@ -115,11 +165,11 @@ def lab(today: date | None = Query(default=None), session: Session = Depends(get
             key="readiness",
             name="Readiness model (Bayesian)",
             question="How much do recovery, HRV and sleep change how strong I am that day?",
-            status="collecting" if paired < READINESS_SESSIONS_NEEDED else "live",
+            status="live" if rfit else "collecting",
             progress=min(1.0, paired / READINESS_SESSIONS_NEEDED),
             progress_label=f"{paired} / {READINESS_SESSIONS_NEEDED} lifting days with WHOOP data",
-            headline=None,
-            doc="docs/math/README.md#3-bayesian-readiness-model",
+            headline=readiness_head,
+            doc="docs/math/readiness.md",
         ),
         LabModel(
             key="fitness_fatigue",
@@ -183,4 +233,55 @@ def backtest(session: Session = Depends(get_session)) -> Backtest:
         level_only_mae_pct=r(s.level_only_mae_pct, 2),
         improvement_pct=r(s.improvement_pct, 1),
         per_lift=per_lift,
+    )
+
+
+@router.get("/lab/readiness", response_model=Readiness)
+def readiness(
+    today: date | None = Query(default=None), session: Session = Depends(get_session)
+) -> Readiness:
+    """Bayesian readiness model: effect of recovery, HRV and sleep on daily strength."""
+    today = today or date.today()
+    fit = readiness_fit(session)
+    paired = session.scalar(
+        select(func.count(func.distinct(Workout.date)))
+        .join(WhoopDaily, WhoopDaily.date == Workout.date)
+    ) or 0
+    if fit is None:
+        return Readiness(
+            status="collecting", days=paired, days_min=rd.MIN_DAYS,
+            days_target=READINESS_SESSIONS_NEEDED, sessions=0, effects=[],
+            intercept=None, intercept_lo90=None, intercept_hi90=None, noise_sd=None, today=None,
+        )
+
+    today_out = None
+    row = session.scalar(select(WhoopDaily).where(WhoopDaily.date == today))
+    if row is not None:
+        exp = fit.expected_today({k: getattr(row, k) for k in _WHOOP_COLS})
+        if exp:
+            today_out = ReadinessToday(
+                date=today, expected=round(exp[0], 2), lo90=round(exp[1], 2), hi90=round(exp[2], 2)
+            )
+
+    def r(v: float) -> float:
+        return round(v, 3)
+
+    return Readiness(
+        status="live",
+        days=fit.days,
+        days_min=rd.MIN_DAYS,
+        days_target=READINESS_SESSIONS_NEEDED,
+        sessions=fit.sessions,
+        effects=[
+            ReadinessEffect(
+                key=e.key, label=e.label, unit=e.unit, sd_raw=r(e.sd_raw), mean=r(e.mean),
+                lo90=r(e.lo90), hi90=r(e.hi90), p_positive=r(e.p_positive), prior_sd=r(e.prior_sd),
+            )
+            for e in fit.effects
+        ],
+        intercept=r(fit.intercept),
+        intercept_lo90=r(fit.intercept_lo90),
+        intercept_hi90=r(fit.intercept_hi90),
+        noise_sd=r(fit.noise_sd),
+        today=today_out,
     )
