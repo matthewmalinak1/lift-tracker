@@ -133,3 +133,26 @@ def test_backtest_endpoint(client):
     assert row["predictions"] == 8 - 3
     assert 0 <= b["coverage_95"] <= 1
     assert b["mae_pct"] is not None and b["naive_mae_pct"] is not None
+
+
+def test_calendar_month_counts_sets_and_prs(client):
+    lift = make_exercise(client, "Cal Press", "chest_bi", ["chest"])
+    log(client, date(2025, 2, 3), "chest_bi", two_sets(lift, 100, 8))
+    log(client, date(2025, 2, 6), "chest_bi", two_sets(lift, 110, 8))  # PR on set 1
+    log(client, date(2025, 2, 9), "legs", [])  # no set detail
+    m = client.get("/api/calendar", params={"year": 2025, "month": 2}).json()
+    by_day = {d["date"]: d for d in m["days"]}
+    assert by_day["2025-02-03"]["prs"] == 0  # first time isn't a PR
+    feb6 = by_day["2025-02-06"]
+    assert (feb6["split_day"], feb6["sets"], feb6["prs"]) == ("chest_bi", 2, 1)
+    assert by_day["2025-02-09"]["sets"] == 0
+    assert m["max_sets"] == 2
+
+
+def test_lifts_have_primary_muscle_and_trend(client):
+    lift = make_exercise(client, "Group Row", "back_shoulder_tri", ["lats", "traps"])
+    log(client, date(2025, 5, 1), "back_shoulder_tri", two_sets(lift, 135, 8))
+    row = next(x for x in client.get("/api/progress/lifts").json() if x["name"] == "Group Row")
+    assert row["primary_muscle"] == "lats"
+    assert row["muscles"] == ["lats", "traps"]
+    assert row["trend"] == "not_enough_data"

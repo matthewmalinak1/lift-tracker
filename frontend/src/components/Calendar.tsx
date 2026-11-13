@@ -1,14 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   api,
   localDateISO,
   prettyDate,
   SPLIT_LABELS,
+  type CalendarMonth,
   type DayDetail,
+  type SplitDay,
   type Summary,
-  type Workout,
 } from "../api";
-import ImportHistory from "./ImportHistory";
 import Sheet from "./Sheet";
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
@@ -110,29 +110,45 @@ function DayPanel({ date, onChanged }: { date: string; onChanged: () => void }) 
   );
 }
 
-/** Month grid with trained days in green; tap a day for its details. */
+const SPLIT_SHORT: Record<SplitDay, string> = {
+  chest_bi: "C/B",
+  back_shoulder_tri: "B/S/T",
+  legs: "LEGS",
+};
+
+/** 1-4: how bright a trained day glows, from its set count vs the month's busiest day. */
+function level(sets: number, max: number) {
+  if (max <= 0 || sets <= 0) return 2;
+  return Math.max(1, Math.min(4, Math.ceil((sets / max) * 4)));
+}
+
+/** Hologram-style month: trained days glow green by volume, with split and PR marks. */
 export default function Calendar({ onChanged }: { onChanged: () => void }) {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1); // 1-12
-  const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [data, setData] = useState<CalendarMonth | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
   const [reload, setReload] = useState(0);
-  const [importing, setImporting] = useState(false);
+  const swipe = useRef<number | null>(null);
 
   useEffect(() => {
-    setError(null);
-    api.workouts(year, month).then(setWorkouts).catch((e) => setError(String(e)));
+    setError(false);
+    api.calendar(year, month).then(setData).catch(() => setError(true));
   }, [year, month, reload]);
 
   useEffect(() => {
     api.summary().then(setSummary).catch(() => setSummary(null));
   }, [reload]);
 
-  const trained = useMemo(() => new Set(workouts.map((w) => w.date)), [workouts]);
-  const monthCount = trained.size;
+  const byDate = useMemo(() => new Map((data?.days ?? []).map((d) => [d.date, d])), [data]);
+  const monthSets = data?.days.reduce((a, d) => a + d.sets, 0) ?? 0;
+  const splitCounts = (data?.days ?? []).reduce<Record<string, number>>((acc, d) => {
+    acc[d.split_day] = (acc[d.split_day] ?? 0) + 1;
+    return acc;
+  }, {});
 
   const firstWeekday = new Date(year, month - 1, 1).getDay();
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -144,41 +160,54 @@ export default function Calendar({ onChanged }: { onChanged: () => void }) {
     setMonth(d.getMonth() + 1);
   };
 
-  const monthName = new Date(year, month - 1, 1).toLocaleString(undefined, {
-    month: "long",
-    year: "numeric",
-  });
+  const monthName = new Date(year, month - 1, 1).toLocaleString(undefined, { month: "long" });
 
   return (
-    <section>
-      <div className="summary-row">
-        <div className="summary-tile">
-          <span className="hud-label">This week</span>
-          <strong>{summary?.this_week ?? "--"}</strong>
-        </div>
-        <div className="summary-tile">
-          <span className="hud-label">{new Date(year, month - 1).toLocaleString(undefined, { month: "short" })}</span>
-          <strong>{monthCount}</strong>
-        </div>
-        <div className="summary-tile">
-          <span className="hud-label">All time</span>
-          <strong>{summary?.total ?? "--"}</strong>
-        </div>
-      </div>
-
-      <div className="cal-header">
-        <button className="icon-btn" onClick={() => shift(-1)} aria-label="Previous month">
+    <section className="cal2">
+      <div className="cal2-head">
+        <button className="ghost-btn" onClick={() => shift(-1)} aria-label="Previous month">
           ‹
         </button>
-        <h2>{monthName}</h2>
-        <button className="icon-btn" onClick={() => shift(1)} aria-label="Next month">
+        <div className="cal2-title">
+          <h2>{monthName}</h2>
+          <span>{year}</span>
+        </div>
+        <button className="ghost-btn" onClick={() => shift(1)} aria-label="Next month">
           ›
         </button>
       </div>
 
-      <div className="cal-grid">
+      <div className="cal2-stats">
+        <div className="hud-stat">
+          <span className="hud-label">This week</span>
+          <span className="hud-value">{summary?.this_week ?? "--"}</span>
+        </div>
+        <div className="hud-stat">
+          <span className="hud-label">Workouts</span>
+          <span className="hud-value">{data?.days.length ?? "--"}</span>
+        </div>
+        <div className="hud-stat">
+          <span className="hud-label">Sets</span>
+          <span className="hud-value">{data ? monthSets : "--"}</span>
+        </div>
+        <div className="hud-stat">
+          <span className="hud-label">PRs</span>
+          <span className="hud-value gold">{data?.prs ?? "--"}</span>
+        </div>
+      </div>
+
+      <div
+        className="cal2-grid"
+        onPointerDown={(e) => (swipe.current = e.clientX)}
+        onPointerUp={(e) => {
+          if (swipe.current === null) return;
+          const dx = e.clientX - swipe.current;
+          swipe.current = null;
+          if (Math.abs(dx) > 60) shift(dx < 0 ? 1 : -1);
+        }}
+      >
         {WEEKDAYS.map((d, i) => (
-          <div key={i} className="cal-weekday">
+          <div key={i} className="cal2-weekday">
             {d}
           </div>
         ))}
@@ -187,40 +216,50 @@ export default function Calendar({ onChanged }: { onChanged: () => void }) {
         ))}
         {Array.from({ length: daysInMonth }, (_, i) => {
           const key = toKey(year, month, i + 1);
+          const day = byDate.get(key);
           const cls = [
-            "cal-day",
-            trained.has(key) ? "trained" : "",
+            "cal2-day",
+            day ? `trained lv${level(day.sets, data?.max_sets ?? 0)}` : "",
             key === todayKey ? "today" : "",
             key > todayKey ? "future" : "",
           ].join(" ");
           return (
             <button key={key} className={cls} onClick={() => setSelected(key)}>
-              {i + 1}
+              <span className="num">{i + 1}</span>
+              {day && <span className="split">{SPLIT_SHORT[day.split_day]}</span>}
+              {day && day.prs > 0 && <span className="pr-star" title={`${day.prs} PR`}>★</span>}
             </button>
           );
         })}
       </div>
 
-      <div className="cal-legend">
-        <span className="swatch trained" /> Workout logged
-        <span className="swatch today" /> Today
+      <div className="cal2-legend">
+        <span className="ramp">
+          <span className="muted">Fewer sets</span>
+          <i className="lv1" />
+          <i className="lv2" />
+          <i className="lv3" />
+          <i className="lv4" />
+          <span className="muted">More</span>
+        </span>
+        <span>
+          <span className="gold">★</span> PR
+        </span>
       </div>
 
-      {error && <p className="muted small">Couldn't load workouts.</p>}
+      {data && data.days.length > 0 && (
+        <div className="cal2-splits">
+          {(Object.keys(SPLIT_LABELS) as SplitDay[]).map((s) => (
+            <div key={s} className="split-chip">
+              <span className="split-tag">{SPLIT_SHORT[s]}</span>
+              <span>{SPLIT_LABELS[s]}</span>
+              <strong>×{splitCounts[s] ?? 0}</strong>
+            </div>
+          ))}
+        </div>
+      )}
 
-      <button className="add-ex-btn import-btn" onClick={() => setImporting(true)}>
-        ⇪ Import past workouts from Excel
-      </button>
-
-      <Sheet open={importing} onClose={() => setImporting(false)}>
-        <ImportHistory
-          onDone={() => {
-            setImporting(false);
-            setReload((r) => r + 1);
-            onChanged();
-          }}
-        />
-      </Sheet>
+      {error && <p className="muted small center">Couldn't load this month.</p>}
 
       <Sheet open={selected !== null} onClose={() => setSelected(null)}>
         {selected && (

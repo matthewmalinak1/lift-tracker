@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { api, MUSCLE_LABELS, type BodyStatus, type Muscle, type WhoopToday } from "../api";
 import { BACK, FRONT, HEAD, OUTLINE_HALF, VIEW_H, VIEW_W, type MuscleShape } from "./bodyShapes";
+import Body3D, { canUse3D } from "./body3d/Body3D";
 
 
 // Recovered muscles sit at the theme's light blue; fresh ones glow red.
@@ -303,7 +304,11 @@ export default function Body() {
         </div>
 
         <div className="hud-figure">
-          <Turntable status={status} selected={selected} onSelect={setSelected} />
+          {canUse3D ? (
+            <Body3D status={status} selected={selected} onSelect={setSelected} />
+          ) : (
+            <Turntable status={status} selected={selected} onSelect={setSelected} />
+          )}
         </div>
 
         <div className="hud-col">

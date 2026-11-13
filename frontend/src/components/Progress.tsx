@@ -65,29 +65,90 @@ function Volume({ weeks }: { weeks: VolumeWeek[] }) {
   );
 }
 
+// Display order for muscle groups (top to bottom of the body, push then pull).
+const GROUP_ORDER: Muscle[] = [
+  "chest", "shoulders", "triceps", "biceps", "forearms", "lats", "traps",
+  "lower_back", "abs", "obliques", "quads", "hamstrings", "glutes", "calves",
+];
+
+const TREND_ICON: Record<LiftSummary["trend"], { icon: string; cls: string }> = {
+  improving: { icon: "↗", cls: "improving" },
+  plateau: { icon: "→", cls: "plateau" },
+  declining: { icon: "↘", cls: "declining" },
+  unclear: { icon: "·", cls: "unclear" },
+  not_enough_data: { icon: "·", cls: "unclear" },
+};
+
+function LiftDetail({ id }: { id: number }) {
+  const [detail, setDetail] = useState<LiftProgress | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    setDetail(null);
+    api.lift(id).then(setDetail).catch(() => setError(true));
+  }, [id]);
+
+  if (error) return <p className="muted small">Couldn't load this lift.</p>;
+  if (!detail) return <p className="muted small center">Loading…</p>;
+  if (detail.series.length === 0) return <p className="muted small">No weighted sets yet.</p>;
+
+  return (
+    <div className="lift-detail">
+      <div className="hero">
+        <span className="hud-label">Estimated 1RM today</span>
+        <div className="hero-num">
+          {Math.round(detail.today_estimate!)}
+          <small> {detail.unit}</small>
+        </div>
+        <span className="muted small">
+          95% range {Math.round(detail.today_lower!)}–{Math.round(detail.today_upper!)}
+        </span>
+        <TrendBadge t={detail.trend} />
+      </div>
+
+      <StrengthChart
+        series={detail.series}
+        unit={detail.unit}
+        today={{
+          date: localDateISO(),
+          estimate: detail.today_estimate!,
+          lower: detail.today_lower!,
+          upper: detail.today_upper!,
+        }}
+      />
+
+      <div className="stat-grid">
+        <div className="card stat">
+          <span className="hud-label">Best e1RM</span>
+          <strong>{Math.round(detail.best_e1rm!)}</strong>
+          <span className="muted small">{prettyDate(detail.best_e1rm_date!)}</span>
+        </div>
+        <div className="card stat">
+          <span className="hud-label">Heaviest set</span>
+          <strong>{detail.heaviest_weight}</strong>
+          <span className="muted small">{prettyDate(detail.heaviest_weight_date!)}</span>
+        </div>
+        <div className="card stat">
+          <span className="hud-label">Day-to-day noise</span>
+          <strong>±{detail.noise_pct?.toFixed(1)}%</strong>
+          <span className="muted small">{detail.fitted ? "fitted to you" : "default until 6 sessions"}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Progress() {
   const [lifts, setLifts] = useState<LiftSummary[] | null>(null);
+  const [openGroup, setOpenGroup] = useState<Muscle | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
-  const [detail, setDetail] = useState<LiftProgress | null>(null);
   const [volume, setVolume] = useState<VolumeWeek[]>([]);
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    api
-      .lifts()
-      .then((l) => {
-        setLifts(l);
-        if (l.length) setSelected(l[0].exercise_id);
-      })
-      .catch(() => setError(true));
+    api.lifts().then(setLifts).catch(() => setError(true));
     api.volume(4).then(setVolume).catch(() => {});
   }, []);
-
-  useEffect(() => {
-    if (selected === null) return;
-    setDetail(null);
-    api.lift(selected).then(setDetail).catch(() => setError(true));
-  }, [selected]);
 
   if (error) return <p className="muted center">Couldn't load progress. Is the database connected?</p>;
   if (lifts === null) return <p className="muted center">Loading…</p>;
@@ -100,67 +161,63 @@ export default function Progress() {
     );
   }
 
+  const groups = GROUP_ORDER.map((m) => ({
+    muscle: m,
+    lifts: lifts.filter((l) => l.primary_muscle === m),
+  })).filter((g) => g.lifts.length > 0);
+
+  const toggleGroup = (m: Muscle) => {
+    setOpenGroup(openGroup === m ? null : m);
+    setSelected(null);
+  };
+
   return (
     <section className="progress">
-      <div className="lift-picker">
-        {lifts.map((l) => (
-          <button
-            key={l.exercise_id}
-            className={`chip ${l.exercise_id === selected ? "on" : ""}`}
-            onClick={() => setSelected(l.exercise_id)}
-          >
-            {l.name}
-          </button>
-        ))}
+      <p className="muted small lab-intro">Tap a muscle group, then an exercise, to see its strength curve.</p>
+
+      <div className="groups">
+        {groups.map((g) => {
+          const open = openGroup === g.muscle;
+          const up = g.lifts.filter((l) => l.trend === "improving").length;
+          return (
+            <div key={g.muscle} className={`group ${open ? "open" : ""}`}>
+              <button className="group-head" onClick={() => toggleGroup(g.muscle)} aria-expanded={open}>
+                <span className="group-name">{MUSCLE_LABELS[g.muscle]}</span>
+                <span className="muted small">
+                  {g.lifts.length} exercise{g.lifts.length === 1 ? "" : "s"}
+                  {up > 0 && <span className="up-count"> · {up} ↗</span>}
+                </span>
+                <span className="chev">{open ? "▾" : "▸"}</span>
+              </button>
+
+              {open && (
+                <div className="group-body">
+                  {g.lifts.map((l) => {
+                    const t = TREND_ICON[l.trend];
+                    const isSel = selected === l.exercise_id;
+                    return (
+                      <div key={l.exercise_id}>
+                        <button
+                          className={`lift-row ${isSel ? "on" : ""}`}
+                          onClick={() => setSelected(isSel ? null : l.exercise_id)}
+                        >
+                          <span className="lift-name">{l.name}</span>
+                          <span className="lift-est">
+                            {l.current_estimate !== null ? Math.round(l.current_estimate) : "--"}
+                            <small> e1RM</small>
+                          </span>
+                          <span className={`trend-dot ${t.cls}`}>{t.icon}</span>
+                        </button>
+                        {isSel && <LiftDetail id={l.exercise_id} />}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
-
-      {detail && detail.series.length > 0 && (
-        <>
-          <div className="hero">
-            <span className="hud-label">Estimated 1RM today</span>
-            <div className="hero-num">
-              {Math.round(detail.today_estimate!)}
-              <small> {detail.unit}</small>
-            </div>
-            <span className="muted small">
-              95% range {Math.round(detail.today_lower!)}–{Math.round(detail.today_upper!)}
-            </span>
-            <TrendBadge t={detail.trend} />
-          </div>
-
-          <div className="card chart-card">
-            <StrengthChart
-              series={detail.series}
-              unit={detail.unit}
-              today={{
-                date: localDateISO(),
-                estimate: detail.today_estimate!,
-                lower: detail.today_lower!,
-                upper: detail.today_upper!,
-              }}
-            />
-          </div>
-
-          <div className="stat-grid">
-            <div className="card stat">
-              <span className="hud-label">Best e1RM</span>
-              <strong>{Math.round(detail.best_e1rm!)}</strong>
-              <span className="muted small">{prettyDate(detail.best_e1rm_date!)}</span>
-            </div>
-            <div className="card stat">
-              <span className="hud-label">Heaviest set</span>
-              <strong>{detail.heaviest_weight}</strong>
-              <span className="muted small">{prettyDate(detail.heaviest_weight_date!)}</span>
-            </div>
-            <div className="card stat">
-              <span className="hud-label">Day-to-day noise</span>
-              <strong>±{detail.noise_pct?.toFixed(1)}%</strong>
-              <span className="muted small">{detail.fitted ? "fitted to you" : "default until 6 sessions"}</span>
-            </div>
-          </div>
-        </>
-      )}
-      {!detail && <p className="muted center">Loading…</p>}
 
       <Volume weeks={volume} />
     </section>

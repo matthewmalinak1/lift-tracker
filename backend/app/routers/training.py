@@ -14,6 +14,8 @@ from ..db import get_session
 from ..models import Exercise, Set, SplitDay, WhoopDaily, Workout
 from ..queries import all_sets, workouts_between
 from ..schemas import (
+    CalendarDay,
+    CalendarMonth,
     DayDetail,
     DayExercise,
     DaySet,
@@ -168,6 +170,50 @@ def day_detail(day: date, session: Session = Depends(get_session)) -> DayDetail:
     whoop = session.scalars(select(WhoopDaily).where(WhoopDaily.date == day)).first()
     return DayDetail(
         date=day, workouts=out, whoop=WhoopToday.model_validate(whoop) if whoop else None
+    )
+
+
+@router.get("/calendar", response_model=CalendarMonth)
+def calendar_month(
+    year: int = Query(ge=2000, le=2100),
+    month: int = Query(ge=1, le=12),
+    session: Session = Depends(get_session),
+) -> CalendarMonth:
+    """Per training day in a month: split, set count and PRs (for the grid)."""
+    first = date(year, month, 1)
+    last = date(year, month, calendar.monthrange(year, month)[1])
+
+    # Same PR rule as the day panel: beats every earlier set of that exercise,
+    # and the exercise was logged on some earlier day (a first session isn't a PR).
+    best: dict[int, float] = {}
+    first_day: dict[int, date] = {}
+    days: dict[date, CalendarDay] = {}
+    for s in all_sets(session):  # chronological
+        d = s.workout.date
+        if d > last:
+            break
+        ex = s.exercise_id
+        first_day.setdefault(ex, d)
+        est = e1rm(s.weight, s.reps, s.rir) if s.weight > 0 else 0.0
+        is_pr = est > 0 and first_day[ex] < d and est > best.get(ex, 0.0)
+        if est > 0:
+            best[ex] = max(best.get(ex, 0.0), est)
+        if d >= first:
+            day = days.setdefault(
+                d, CalendarDay(date=d, split_day=s.workout.split_day, sets=0, prs=0)
+            )
+            day.sets += 1
+            day.prs += is_pr
+
+    # Days logged without set detail still count as trained.
+    for w in workouts_between(session, first, last):
+        days.setdefault(w.date, CalendarDay(date=w.date, split_day=w.split_day, sets=0, prs=0))
+
+    ordered = sorted(days.values(), key=lambda d: d.date)
+    return CalendarMonth(
+        days=ordered,
+        max_sets=max((d.sets for d in ordered), default=0),
+        prs=sum(d.prs for d in ordered),
     )
 
 

@@ -163,9 +163,12 @@ class LiftSummary(BaseModel):
     exercise_id: int
     name: str
     split_day: SplitDay
+    muscles: list[Muscle]  # tagged muscles, primary first
+    primary_muscle: Muscle  # used to group lifts on the Progress tab
     sessions: int
     best_e1rm: float | None
     current_estimate: float | None
+    trend: str  # improving | plateau | declining | unclear | not_enough_data
 
 
 class SeriesPoint(BaseModel):
@@ -278,3 +281,19 @@ class Backtest(BaseModel):
     naive_mae_pct: float | None
     improvement_pct: float | None
     per_lift: list[BacktestLift]
+
+
+# --- Calendar month view -----------------------------------------------------
+
+
+class CalendarDay(BaseModel):
+    date: date
+    split_day: SplitDay
+    sets: int
+    prs: int
+
+
+class CalendarMonth(BaseModel):
+    days: list[CalendarDay]
+    max_sets: int
+    prs: int

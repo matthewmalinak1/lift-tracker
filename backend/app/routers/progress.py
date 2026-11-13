@@ -19,22 +19,31 @@ router = APIRouter(prefix="/progress")
 
 
 @router.get("/lifts", response_model=list[LiftSummary])
-def lifts(session: Session = Depends(get_session)) -> list[LiftSummary]:
-    """Every exercise with logged sets, most-trained first (feeds the picker)."""
+def lifts(
+    today: date | None = Query(default=None), session: Session = Depends(get_session)
+) -> list[LiftSummary]:
+    """Every exercise with weighted sets, most-trained first, with the muscle
+    it's grouped under on the Progress tab."""
+    today = today or date.today()
     bests = session_bests(all_sets(session))
     exercises = {e.id: e for e in session.scalars(select(Exercise))}
     out = []
     for ex_id, obs in bests.items():
         fit = fit_kalman(obs)
         e = exercises[ex_id]
+        muscles = [recovery.Muscle(m) for m in e.muscles or []]
+        primary = muscles[0] if muscles else recovery.DEFAULT_MUSCLES[e.split_day][0]
         out.append(
             LiftSummary(
                 exercise_id=ex_id,
                 name=e.name,
                 split_day=e.split_day,
+                muscles=muscles,
+                primary_muscle=primary,
                 sessions=len(obs),
                 best_e1rm=round(max(o.value for o in obs), 1),
                 current_estimate=round(fit.points[-1].mean, 1),
+                trend=trend(obs, today).status,
             )
         )
     # Most-trained first; among equals, heavier (usually compound) lifts first.

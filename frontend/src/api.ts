@@ -129,17 +129,13 @@ export const api = {
     post<Exercise>("/api/exercises", body),
   createWorkout: (body: NewWorkout) => post<Workout>("/api/workouts", body),
   deleteWorkout: (id: number) => del(`/api/workouts/${id}`),
-  lifts: () => get<LiftSummary[]>("/api/progress/lifts"),
+  lifts: () => get<LiftSummary[]>(`/api/progress/lifts?today=${today()}`),
+  calendar: (year: number, month: number) =>
+    get<CalendarMonth>(`/api/calendar?year=${year}&month=${month}`),
   lift: (id: number) => get<LiftProgress>(`/api/progress/lift/${id}?today=${today()}`),
   volume: (weeks = 4) => get<VolumeWeek[]>(`/api/progress/volume?today=${today()}&weeks=${weeks}`),
   lab: () => get<Lab>(`/api/lab?today=${today()}`),
   backtest: () => get<Backtest>("/api/lab/backtest"),
-  importXlsx: (file: File, commit: boolean) =>
-    request<ImportReport>(`/api/import/xlsx?commit=${commit}&today=${today()}`, {
-      method: "POST",
-      body: file,
-      headers: { "content-type": "application/octet-stream" },
-    }),
 };
 
 
@@ -227,9 +223,12 @@ export interface LiftSummary {
   exercise_id: number;
   name: string;
   split_day: SplitDay;
+  muscles: Muscle[];
+  primary_muscle: Muscle;
   sessions: number;
   best_e1rm: number | null;
   current_estimate: number | null;
+  trend: TrendOut["status"];
 }
 
 export interface SeriesPoint {
@@ -313,26 +312,6 @@ export function prettyDate(iso: string, opts: Intl.DateTimeFormatOptions = { mon
   return new Date(iso + "T00:00").toLocaleDateString(undefined, opts);
 }
 
-// --- Import -----------------------------------------------------------------
-
-export interface ImportProblem {
-  sheet: string;
-  row: number;
-  message: string;
-}
-
-export interface ImportReport {
-  committed: boolean;
-  workouts: number;
-  sets: number;
-  new_exercises: string[];
-  date_from: string | null;
-  date_to: string | null;
-  already_in_app: number;
-  errors: ImportProblem[];
-  warnings: ImportProblem[];
-}
-
 // --- Backtest ---------------------------------------------------------------
 
 export interface BacktestLift {
@@ -356,4 +335,19 @@ export interface Backtest {
   naive_mae_pct: number | null;
   improvement_pct: number | null;
   per_lift: BacktestLift[];
+}
+
+// --- Calendar month ---------------------------------------------------------
+
+export interface CalendarDay {
+  date: string;
+  split_day: SplitDay;
+  sets: number;
+  prs: number;
+}
+
+export interface CalendarMonth {
+  days: CalendarDay[];
+  max_sets: number;
+  prs: number;
 }
