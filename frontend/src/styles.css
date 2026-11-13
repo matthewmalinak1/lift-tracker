@@ -1958,3 +1958,50 @@ main {
   font-size: 0.85rem;
   text-align: left;
 }
+
+
+/* HR zones, estimates */
+.zone-totals {
+  margin-top: 6px;
+}
+.zone-row {
+  display: grid;
+  grid-template-columns: 70px 1fr 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 0.8rem;
+}
+.zone-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.zone-name i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.est-tag {
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+.reconnect-banner {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-decoration: none;
+}

@@ -138,6 +138,7 @@ def health_trends(
             TrendDay(
                 date=d,
                 workout=d in trained,
+                zones_min=(w.raw or {}).get("zones_min") if w else None,
                 **{f: (getattr(w, f) if w else None) for f in TREND_FIELDS},
             )
         )

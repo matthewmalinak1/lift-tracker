@@ -37,7 +37,9 @@ from .models import WhoopDaily, WhoopToken
 AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2/auth"
 TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token"
 API = "https://api.prod.whoop.com/developer/v2"
-SCOPES = "offline read:recovery read:cycles read:sleep read:profile"
+SCOPES = "offline read:recovery read:cycles read:sleep read:profile read:workout"
+# Added after the first release; older connections need a reconnect to get it.
+OPTIONAL_SCOPES = ("read:workout",)
 FIRST_SYNC_DAYS = 120  # how far back the first sync reaches
 RESYNC_OVERLAP_DAYS = 3  # re-pull recent days, since WHOOP finalises scores late
 PAGE_LIMIT = 25  # WHOOP's maximum page size
@@ -232,7 +234,39 @@ def sleep_hours(score: dict) -> float | None:
     return round(max(asleep, 0) / 3_600_000, 2)
 
 
-def build_days(cycles: list[dict], recoveries: list[dict], sleeps: list[dict]) -> dict[date, dict]:
+def missing_scopes(tok: WhoopToken | None) -> list[str]:
+    granted = set((tok.scope or "").split()) if tok else set()
+    return [s for s in OPTIONAL_SCOPES if s not in granted]
+
+
+ZONES = 6  # WHOOP heart-rate zones 0-5
+
+
+def workout_day(workout: dict) -> date:
+    return _local(workout["start"], workout.get("timezone_offset")).date()
+
+
+def zone_minutes(workouts: list[dict]) -> dict[date, list[float]]:
+    """Minutes in each heart-rate zone (0-5), summed over each day's workouts."""
+    out: dict[date, list[float]] = {}
+    for w in workouts:
+        z = (w.get("score") or {}).get("zone_durations") or {}
+        if w.get("score_state") != "SCORED" or not z or not w.get("start"):
+            continue
+        names = ("zero", "one", "two", "three", "four", "five")
+        mins = [(z.get(f"zone_{n}_milli") or 0) / 60_000 for n in names]
+        day = out.setdefault(workout_day(w), [0.0] * ZONES)
+        for i, m in enumerate(mins):
+            day[i] = round(day[i] + m, 1)
+    return out
+
+
+def build_days(
+    cycles: list[dict],
+    recoveries: list[dict],
+    sleeps: list[dict],
+    workouts: list[dict] | None = None,
+) -> dict[date, dict]:
     """Merge WHOOP records into one dict of fields per day."""
     days: dict[date, dict] = {}
     cycle_dates: dict[object, date] = {}
@@ -272,6 +306,10 @@ def build_days(cycles: list[dict], recoveries: list[dict], sleeps: list[dict]) -
         row["sleep_hours"] = sleep_hours(score)
         row["sleep_performance"] = score.get("sleep_performance_percentage")
         row["raw"]["sleep"] = sl
+
+    # Extra fields live in the raw JSON, so no database migration is needed.
+    for d, mins in zone_minutes(workouts or []).items():
+        days.setdefault(d, {"raw": {}})["raw"]["zones_min"] = mins
     return days
 
 
@@ -297,12 +335,16 @@ def sync(session: Session, now: datetime | None = None) -> int:
     else:
         start = now - timedelta(days=FIRST_SYNC_DAYS)
 
+    missing = missing_scopes(tok)
+    workouts: list[dict] = []
     with client_factory() as c:
         cycles = _get_all(c, token, "/cycle", start, now)
         recoveries = _get_all(c, token, "/recovery", start, now)
         sleeps = _get_all(c, token, "/activity/sleep", start, now)
+        if "read:workout" not in missing:
+            workouts = _get_all(c, token, "/activity/workout", start, now)
 
-    days = build_days(cycles, recoveries, sleeps)
+    days = build_days(cycles, recoveries, sleeps, workouts)
     existing = {
         r.date: r
         for r in session.scalars(select(WhoopDaily).where(WhoopDaily.date.in_(list(days))))

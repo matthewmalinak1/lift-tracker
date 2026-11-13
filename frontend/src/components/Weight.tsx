@@ -104,7 +104,7 @@ export default function Weight({ onChanged }: { onChanged?: () => void }) {
             <div className="range-row">
               <span className="muted small">Scale vs trend</span>
               <div className="segmented small-seg">
-                {[30, 90, 365].map((r) => (
+                {[7, 30, 90, 365].map((r) => (
                   <button key={r} type="button" className={range === r ? "active" : ""} onClick={() => setRange(r)}>
                     {r === 365 ? "1y" : `${r}d`}
                   </button>

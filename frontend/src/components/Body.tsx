@@ -356,10 +356,12 @@ function WhoopBar({ onSynced }: { onSynced: () => void }) {
       </p>
     );
   }
-  if (!st.connected || error === "WHOOP needs reconnecting.") {
+  if (!st.connected || error === "WHOOP needs reconnecting." || st.missing_scopes?.length) {
     return (
       <a className="whoop-connect" href="/api/whoop/connect">
-        <span className="whoop-dot" /> {error ? "Reconnect WHOOP" : "Connect WHOOP"}
+        <span className="whoop-dot" />{" "}
+        {error || st.missing_scopes?.length ? "Reconnect WHOOP" : "Connect WHOOP"}
+        {st.missing_scopes?.length ? <small className="muted"> · adds HR zones</small> : null}
       </a>
     );
   }

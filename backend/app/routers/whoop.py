@@ -42,6 +42,7 @@ def status(session: Session = Depends(get_session)) -> WhoopStatus:
     return WhoopStatus(
         configured=whoop.configured(),
         connected=tok is not None,
+        missing_scopes=whoop.missing_scopes(tok) if tok else [],
         last_sync_at=whoop._aware(tok.last_sync_at) if tok and tok.last_sync_at else None,
         days_stored=days,
         first_day=first,

@@ -396,6 +396,7 @@ export function recoveryZone(score: number | null | undefined): "green" | "yello
 export interface WhoopStatus {
   configured: boolean;
   connected: boolean;
+  missing_scopes: string[];
   last_sync_at: string | null;
   days_stored: number;
   first_day: string | null;
@@ -431,10 +432,11 @@ export interface TrendDay {
   steps: number | null;
   hrv_rmssd_ms: number | null;
   resting_hr: number | null;
+  zones_min: number[] | null; // minutes in HR zones 0-5
   workout: boolean;
 }
 
 export interface HealthTrends {
   days: TrendDay[];
-  averages: Partial<Record<keyof Omit<TrendDay, "date" | "workout">, number | null>>;
+  averages: Partial<Record<keyof Omit<TrendDay, "date" | "workout" | "zones_min">, number | null>>;
 }

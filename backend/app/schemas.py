@@ -332,6 +332,7 @@ class CalendarMonth(BaseModel):
 class WhoopStatus(BaseModel):
     configured: bool  # client ID and secret are set in Vercel
     connected: bool
+    missing_scopes: list[str] = []  # granted before these were added; reconnect to get them
     last_sync_at: datetime | None
     days_stored: int
     first_day: date | None
@@ -381,6 +382,7 @@ class TrendDay(BaseModel):
     steps: int | None
     hrv_rmssd_ms: float | None
     resting_hr: float | None
+    zones_min: list[float] | None  # minutes in WHOOP HR zones 0-5 from that day's workouts
     workout: bool
 
 

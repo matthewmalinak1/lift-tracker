@@ -69,6 +69,28 @@ SLEEPS = [
 ]
 
 
+WORKOUTS = [
+    # 6:00pm Nov 12 local: 10 min zone 1, 25 min zone 2, 8 min zone 3
+    {
+        "id": "w1",
+        "start": "2025-11-13T00:00:00.000Z",
+        "end": "2025-11-13T00:45:00.000Z",
+        "timezone_offset": "-06:00",
+        "score_state": "SCORED",
+        "score": {
+            "zone_durations": {
+                "zone_zero_milli": 0,
+                "zone_one_milli": 600_000,
+                "zone_two_milli": 1_500_000,
+                "zone_three_milli": 480_000,
+                "zone_four_milli": 0,
+                "zone_five_milli": 0,
+            }
+        },
+    },
+]
+
+
 class FakeWhoop:
     def __init__(self):
         self.calls: list[tuple[str, dict]] = []
@@ -103,6 +125,7 @@ class FakeWhoop:
             "/developer/v2/cycle": CYCLES,
             "/developer/v2/recovery": RECOVERIES,
             "/developer/v2/activity/sleep": SLEEPS,
+            "/developer/v2/activity/workout": WORKOUTS,
         }[path]
         # Two pages, to exercise next_token
         if "nextToken" not in params:
@@ -241,3 +264,29 @@ def test_callback_works_without_app_cookie_but_needs_valid_state(anon, fake):
     assert r.headers["location"] == "/?whoop=connected"
     r = anon.get(cb, params={"code": "c", "state": "x.y"}, follow_redirects=False)
     assert r.headers["location"] == "/?whoop=error"
+
+
+def test_heart_rate_zones_flow_through(client, fake):
+    state = whoop.make_state()
+    client.get("/api/whoop/callback", params={"code": "c", "state": state}, follow_redirects=False)
+    t = client.get("/api/health/trends", params={"days": 7, "today": "2025-11-14"}).json()
+    nov12 = next(d for d in t["days"] if d["date"] == "2025-11-12")
+    assert nov12["zones_min"] == [0.0, 10.0, 25.0, 8.0, 0.0, 0.0]
+    assert client.get("/api/whoop/status").json()["missing_scopes"] == []
+
+
+def test_old_connection_reports_missing_scopes_and_still_syncs(client, fake):
+    with SessionLocal() as s:
+        s.add(
+            WhoopToken(
+                access_token="access-1",
+                refresh_token="refresh-1",
+                scope="offline read:recovery read:cycles read:sleep read:profile",
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+            )
+        )
+        s.commit()
+    assert client.post("/api/whoop/sync").status_code == 200
+    paths = {c[0] for c in fake.calls}
+    assert "/developer/v2/activity/workout" not in paths  # not asked for without the scope
+    assert client.get("/api/whoop/status").json()["missing_scopes"] == ["read:workout"]
