@@ -286,6 +286,7 @@ class BacktestLift(BaseModel):
     coverage_95: float
     mae_pct: float
     naive_mae_pct: float
+    level_only_mae_pct: float
 
 
 class Backtest(BaseModel):
@@ -298,6 +299,7 @@ class Backtest(BaseModel):
     band_pct: float | None
     mae_pct: float | None
     naive_mae_pct: float | None
+    level_only_mae_pct: float | None  # the original random-walk filter, as a benchmark
     improvement_pct: float | None
     per_lift: list[BacktestLift]
 

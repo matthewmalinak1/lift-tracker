@@ -53,6 +53,46 @@ The app maximizes this over a 24 × 24 log-spaced grid of *relative* noise level
 
 **Why a grid and not an optimizer?** Two parameters, a few hundred observations, and no SciPy in the serverless bundle (faster cold starts). The grid is easy to reason about and can't get stuck in a local optimum.
 
+## 4b. Local linear trend model (the one the app uses)
+
+The model above has no direction: its forecast for the next session is "where you are now", built from a weighted average of past sessions. For a lifter who keeps getting stronger, that average always trails behind. The walk-forward backtest (section 6) caught this on real data: the random-walk filter's error was **38% worse than naive**. Simulations reproduce it: a lifter gaining ~1% per session with ~1% session noise makes the random-walk filter lose to naive by about a third.
+
+The fix is a second hidden state, the **rate of gain** $b$ (lb/day):
+
+$$
+\begin{aligned}
+L_t &= L_{t-1} + b_{t-1}\,\Delta t + w_t, & w_t &\sim \mathcal N(0,\; q_L\,\Delta t)\\
+b_t &= b_{t-1} + u_t, & u_t &\sim \mathcal N(0,\; q_b\,\Delta t)\\
+y_t &= L_t + v_t, & v_t &\sim \mathcal N(0,\; r)
+\end{aligned}
+$$
+
+In matrix form the state is $s_t = (L_t, b_t)^\top$ with transition $F = \begin{pmatrix}1 & \Delta t\\ 0 & 1\end{pmatrix}$ and observation $H = (1,\ 0)$. Because the slope noise also accumulates into the level over a gap, the process covariance is
+
+$$
+Q(\Delta t) = \begin{pmatrix} q_L\Delta t + q_b\Delta t^3/3 & q_b\Delta t^2/2 \\ q_b\Delta t^2/2 & q_b\Delta t \end{pmatrix}.
+$$
+
+The filter is the same two steps in two dimensions: $\hat s^- = F\hat s$, $P^- = FPF^\top + Q$, then $K = P^-H^\top / (HP^-H^\top + r)$, $\hat s = \hat s^- + K(y_t - \hat L^-)$, $P = (I - KH)P^-$. The forecast for the next session is $\hat L + \hat b\,\Delta t$: **where you're heading, not where you've been.**
+
+- **Initial slope:** $b_0 = 0$ with prior SD 0.5% of the lift per day (~3.5%/week), weak enough that a few sessions pin it down.
+- **Fitting:** $q_L$, $q_b$ and $r$ by maximum likelihood over a 10 × 10 × 10 log grid (8³ inside the backtest for speed). Defaults below 6 sessions.
+- **Output:** the slope state gives a live estimate of your rate of gain, with its own uncertainty.
+
+**The trade-off.** One extra state means one more thing to estimate from a short history. On simulated lifters with 9 weekly sessions:
+
+| Simulated lifter | Trend filter vs naive | No-trend filter vs naive |
+|---|---|---|
+| Flat, 1% noise | −2% | +19% |
+| Flat, 3% noise | +1% | +28% |
+| +1%/session, 1% noise | **+6%** | −34% |
+| +2%/session, 1% noise | **+37%** | −54% |
+| +2%/session, 3% noise | +5% | −19% |
+
+(Positive = smaller error than naive.) The trend model gives up a little on lifters who are flat and fixes the large failure on lifters who are progressing. The no-trend filter stays in the backtest as a benchmark, so the Lab card always shows all three.
+
+**Honesty rule:** the model design (structure, priors, grid) was fixed for the reason above, and checked on simulations only, *before* rerunning the backtest on real data. Changing it again until it wins on the same history would be overfitting to the test set.
+
 ## 5. Validation
 
 `backend/tests/test_strength.py` simulates lifters with known noise and drift and checks that:
@@ -66,17 +106,17 @@ The app maximizes this over a 24 × 24 log-spaced grid of *relative* noise level
 The checks above use simulated lifters. The backtest ([`backend/app/backtest.py`](../../backend/app/backtest.py), shown in the Lab tab) runs on **real history**:
 
 1. For each lift, start once it has 3 sessions.
-2. For session $t$, fit $q, r$ by MLE using **only sessions $1..t-1$** (refit every 3 steps), filter them, and predict session $t$:
-   $$\hat y_t = \hat x_{t-1}, \qquad \operatorname{Var}(y_t) = P_{t-1} + q\,\Delta t + r$$
+2. For session $t$, fit the parameters by MLE using **only sessions $1..t-1$** (refit every 3 steps), filter them, and predict session $t$ with the trend filter:
+   $$\hat y_t = \hat L_{t-1} + \hat b_{t-1}\Delta t, \qquad \operatorname{Var}(y_t) = H\,P^-_t H^\top + r$$
    The prediction variance includes $r$, because we're predicting a noisy *reading*, not the hidden strength.
-3. Compare against a naive forecast, $\hat y_t^{\text{naive}} = y_{t-1}$ ("same as last session").
+3. Compare against two benchmarks: the no-trend filter from section 2 ($\hat y_t = \hat x_{t-1}$), and a naive forecast, $\hat y_t^{\text{naive}} = y_{t-1}$ ("same as last session").
 4. Pool every prediction across lifts and report:
 
 | Metric | Definition | Why it matters |
 |---|---|---|
 | Coverage | share of $y_t$ inside $\hat y_t \pm 1.96\sqrt{\operatorname{Var}}$ | calibration: should be ≈ 95% |
 | Band width | average $1.96\sqrt{\operatorname{Var}} / \hat y_t$ | coverage is trivial with huge bands; this keeps it honest |
-| MAE % | average $|y_t - \hat y_t| / y_t$ for filter and naive | accuracy, and whether the filter beats the obvious baseline |
+| MAE % | average $|y_t - \hat y_t| / y_t$ for trend filter, no-trend filter and naive | accuracy, and whether the filter beats the obvious baselines |
 
 There is no look-ahead: a test asserts that changing a future session never changes an earlier prediction.
 
@@ -105,4 +145,5 @@ The split between *plateau* and *unclear* matters: a wide interval that happens 
 
 - This is the same machinery used in trading to estimate a time-varying hedge ratio, or to filter a noisy price into a "fair value" signal.
 - The design choice that matters is $q/r$, the signal-to-noise ratio. Fitting it by likelihood rather than hand-tuning is the difference between a filter and a moving average.
-- Planned extension: RTS smoothing for a better historical curve, and a local linear trend model (a state for strength *and* for its rate of change).
+- The first version lost to "same as last session" by 38% on real data. The backtest exposed it, simulations explained it (no trend term, so it lags a progressing lifter), and the fix was a local linear trend state. The failed model is kept as a benchmark.
+- Planned extension: RTS smoothing for a better historical curve, and pooling the noise parameters across lifts so short histories borrow strength from each other.

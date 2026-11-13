@@ -346,6 +346,7 @@ export interface BacktestLift {
   coverage_95: number;
   mae_pct: number;
   naive_mae_pct: number;
+  level_only_mae_pct: number;
 }
 
 export interface Backtest {
@@ -358,6 +359,7 @@ export interface Backtest {
   band_pct: number | null;
   mae_pct: number | null;
   naive_mae_pct: number | null;
+  level_only_mae_pct: number | null;
   improvement_pct: number | null;
   per_lift: BacktestLift[];
 }

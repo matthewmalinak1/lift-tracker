@@ -85,3 +85,48 @@ def test_trend_statuses():
     assert trend(falling, today).status == "declining"
 
     assert trend(rising[:2], today).status == "not_enough_data"
+
+
+# --- Local linear trend filter ---------------------------------------------
+
+from app.strength import fit_trend_kalman  # noqa: E402
+
+
+def _progressing(n, gain_pct_week, noise_pct, seed, gap=7, level=200.0):
+    rng = random.Random(seed)
+    out, x = [], level
+    for i in range(n):
+        x *= 1 + gain_pct_week / 100 * gap / 7
+        day = date(2026, 1, 1) + timedelta(days=gap * i)
+        out.append(Obs(day, x * (1 + rng.gauss(0, noise_pct / 100))))
+    return out
+
+
+def test_trend_filter_learns_the_rate_of_gain():
+    fits = [fit_trend_kalman(_progressing(30, 1.0, 1.5, seed)) for seed in range(8)]
+    rates = [f.drift_pct_per_week for f in fits]
+    assert 0.6 < sum(rates) / len(rates) < 1.4  # true rate: 1% per week
+
+
+def test_trend_filter_does_not_lag_a_progressing_lifter():
+    lag_trend, lag_level = [], []
+    for seed in range(8):
+        obs = _progressing(20, 2.0, 1.0, seed)
+        true_last = 200.0 * (1.02 ** 19)
+        lag_trend.append(true_last - fit_trend_kalman(obs).points[-1].mean)
+        lag_level.append(true_last - fit_kalman(obs).points[-1].mean)
+    assert abs(sum(lag_trend)) < abs(sum(lag_level))
+
+
+def test_trend_forecast_follows_the_slope_and_widens():
+    fit = fit_trend_kalman(_progressing(20, 2.0, 1.0, seed=3))
+    last = fit.points[-1]
+    near, sd_near = fit.predict(last.day + timedelta(days=7))
+    far, sd_far = fit.predict(last.day + timedelta(days=28))
+    assert last.mean < near < far
+    assert sd_far > sd_near
+
+
+def test_trend_filter_defaults_with_little_data():
+    fit = fit_trend_kalman(_progressing(4, 1.0, 2.0, seed=1))
+    assert not fit.fitted and len(fit.points) == 4

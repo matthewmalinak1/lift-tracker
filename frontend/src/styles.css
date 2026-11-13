@@ -1310,7 +1310,7 @@ main {
 }
 .bt-row {
   display: grid;
-  grid-template-columns: 1fr 28px 48px 44px 48px;
+  grid-template-columns: 1fr 24px 44px 40px 56px 44px;
   gap: 6px;
   padding: 5px 0;
   border-top: 1px solid var(--border);

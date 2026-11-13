@@ -12,7 +12,7 @@ from ..db import get_session
 from ..models import Exercise, WhoopDaily, Workout
 from ..queries import all_sets, session_bests
 from ..schemas import Backtest, BacktestLift, Lab, LabModel, PlateauRow
-from ..strength import MIN_OBS_TO_FIT, PLATEAU_MIN_SESSIONS, fit_kalman, trend
+from ..strength import MIN_OBS_TO_FIT, PLATEAU_MIN_SESSIONS, fit_trend_kalman, trend
 from .body import muscle_states_for
 from .progress import trend_out
 
@@ -29,7 +29,7 @@ def lab(today: date | None = Query(default=None), session: Session = Depends(get
     names = dict(session.execute(select(Exercise.id, Exercise.name)).all())
 
     # 1. Kalman filter
-    fits = {ex: fit_kalman(obs) for ex, obs in bests.items() if len(obs) >= 2}
+    fits = {ex: fit_trend_kalman(obs) for ex, obs in bests.items() if len(obs) >= 2}
     fitted = [f for f in fits.values() if f.fitted]
     max_sessions = max((len(o) for o in bests.values()), default=0)
     if fitted:
@@ -139,7 +139,7 @@ def lab(today: date | None = Query(default=None), session: Session = Depends(get
 
 @router.get("/lab/backtest", response_model=Backtest)
 def backtest(session: Session = Depends(get_session)) -> Backtest:
-    """Out-of-sample test of the strength filter on your own history."""
+    """Out-of-sample test of the strength filters on your own history."""
     bests = session_bests(all_sets(session))
     names = dict(session.execute(select(Exercise.id, Exercise.name)).all())
 
@@ -159,6 +159,7 @@ def backtest(session: Session = Depends(get_session)) -> Backtest:
                 coverage_95=round(s.coverage_95, 3),
                 mae_pct=round(s.mae_pct, 2),
                 naive_mae_pct=round(s.naive_mae_pct, 2),
+                level_only_mae_pct=round(s.level_only_mae_pct, 2),
             )
         )
     per_lift.sort(key=lambda r: -r.predictions)
@@ -179,6 +180,7 @@ def backtest(session: Session = Depends(get_session)) -> Backtest:
         band_pct=r(s.band_pct, 2),
         mae_pct=r(s.mae_pct, 2),
         naive_mae_pct=r(s.naive_mae_pct, 2),
+        level_only_mae_pct=r(s.level_only_mae_pct, 2),
         improvement_pct=r(s.improvement_pct, 1),
         per_lift=per_lift,
     )

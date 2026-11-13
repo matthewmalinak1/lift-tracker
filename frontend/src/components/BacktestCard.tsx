@@ -33,7 +33,7 @@ export default function BacktestCard() {
   const ready = b.predictions >= 20 && b.coverage_95 !== null;
   const resume =
     ready && b.date_from && b.date_to
-      ? `Backtested a Kalman filter (MLE-fitted noise) on ${monthsBetween(b.date_from, b.date_to)} of personal ` +
+      ? `Backtested a local-linear-trend Kalman filter (MLE-fitted noise) on ${monthsBetween(b.date_from, b.date_to)} of personal ` +
         `strength data (${b.predictions} out-of-sample predictions across ${b.lifts} lifts): 95% prediction ` +
         `bands covered ${Math.round(b.coverage_95! * 100)}% of sessions, and one-step error was ` +
         `${Math.round(b.improvement_pct ?? 0)}% lower than a naive last-session forecast.`
@@ -53,12 +53,12 @@ export default function BacktestCard() {
   return (
     <article className="card model-card backtest">
       <div className="model-head">
-        <h3>Backtest · strength filter</h3>
+        <h3>Backtest · trend filter</h3>
         <span className={`status-pill ${ready ? "live" : "collecting"}`}>{ready ? "Live" : "Collecting data"}</span>
       </div>
       <p className="model-q">
-        Each session is predicted using only the sessions before it, so nothing from the future leaks in. How good
-        are the predictions?
+        Each session is predicted using only the sessions before it, so nothing from the future leaks in. The trend
+        filter is compared with the original no-trend filter and with "same as last session".
       </p>
 
       {b.predictions === 0 ? (
@@ -79,7 +79,9 @@ export default function BacktestCard() {
             <div className="bt-tile">
               <span className="hud-label">Filter error</span>
               <strong>{b.mae_pct?.toFixed(1)}%</strong>
-              <span className="muted small">naive {b.naive_mae_pct?.toFixed(1)}%</span>
+              <span className="muted small">
+                naive {b.naive_mae_pct?.toFixed(1)}% · no-trend {b.level_only_mae_pct?.toFixed(1)}%
+              </span>
             </div>
             <div className="bt-tile">
               <span className="hud-label">vs naive</span>
@@ -115,6 +117,7 @@ export default function BacktestCard() {
                 <span>n</span>
                 <span>Cover</span>
                 <span>Err</span>
+                <span>No-trend</span>
                 <span>Naive</span>
               </div>
               {b.per_lift.map((l) => (
@@ -123,6 +126,7 @@ export default function BacktestCard() {
                   <span>{l.predictions}</span>
                   <span>{Math.round(l.coverage_95 * 100)}%</span>
                   <span>{l.mae_pct.toFixed(1)}%</span>
+                  <span>{l.level_only_mae_pct.toFixed(1)}%</span>
                   <span>{l.naive_mae_pct.toFixed(1)}%</span>
                 </div>
               ))}

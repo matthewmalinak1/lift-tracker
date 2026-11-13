@@ -34,7 +34,23 @@ def test_bands_are_calibrated_and_filter_beats_naive_on_noisy_data():
     s = summarize(preds)
     assert s.predictions == 12 * 27
     assert 0.85 <= s.coverage_95 <= 0.99
-    assert s.improvement_pct > 15  # smoothing beats "same as last time"
+    # Smoothing still beats "same as last time" on noisy data. The no-trend
+    # filter is a little better here (slow gains, lots of noise), which is the
+    # price of estimating the extra slope state; see docs/math/kalman-e1rm.md.
+    assert s.improvement_pct > 10
+    assert s.mae_pct < 1.1 * s.level_only_mae_pct
+
+
+def test_trend_filter_beats_both_benchmarks_on_a_steady_gainer():
+    # Low session noise and steady gains: the no-trend filter lags and loses to
+    # naive, which is what the trend term is there to fix.
+    preds = []
+    for seed in range(12):
+        preds += walk_forward(seed, lifter(20, 1, 4, seed=seed))
+    s = summarize(preds)
+    assert s.level_only_mae_pct > s.naive_mae_pct  # the original model's failure
+    assert s.mae_pct < s.naive_mae_pct
+    assert s.mae_pct < s.level_only_mae_pct
 
 
 def test_summary_of_nothing():

@@ -148,6 +148,139 @@ def fit_kalman(obs: list[Obs], grid: int = 24) -> KalmanFit:
     return KalmanFit(points, q, r, ll, fitted=True)
 
 
+# --- Local linear trend Kalman filter ---------------------------------------
+#
+# The random-walk filter above has no notion of direction: its best forecast
+# for the next session is "where you are now", built from a weighted average
+# of past sessions. For a lifter who is steadily progressing that average
+# always lags behind. This model adds a second hidden state, the rate of gain:
+#
+# State:        L_t = L_{t-1} + b_{t-1} * dt + w_t,   w_t ~ N(0, q_level * dt)
+#               b_t = b_{t-1} + u_t,                  u_t ~ N(0, q_slope * dt)
+# Observation:  y_t = L_t + v_t,                      v_t ~ N(0, r)
+#
+# L is strength (lb), b is the rate of gain (lb/day). The forecast for the
+# next session is L + b * dt: where you're heading, not where you've been.
+# q_level, q_slope and r are chosen by maximum likelihood, as above.
+#
+# The slope starts at 0 with a weakly informative prior SD of 0.5% of the
+# lift per day (~3.5%/week), so a couple of sessions are enough to learn it.
+
+SLOPE_PRIOR_SD = 0.005
+TREND_DEFAULT_NOISE = 0.03  # session noise when there's too little data to fit
+TREND_DEFAULT_LEVEL = 0.001  # level shocks, per sqrt(day)
+TREND_DEFAULT_SLOPE = 0.0002  # change in the rate of gain, per sqrt(day)
+
+
+@dataclass(frozen=True)
+class TrendKalmanFit:
+    points: list[FilterPoint]  # filtered strength level after each session
+    slopes: list[tuple[float, float]]  # (rate of gain lb/day, its SD) after each session
+    cov: tuple[float, float, float]  # last (P_LL, P_Lb, P_bb)
+    q_level: float
+    q_slope: float
+    r: float
+    loglik: float | None
+    fitted: bool
+
+    @property
+    def noise_pct(self) -> float:
+        return 100 * math.sqrt(self.r) / self.points[-1].mean
+
+    @property
+    def drift_pct_per_week(self) -> float:
+        """Current estimated rate of gain, as % of the lift per week."""
+        return 100 * 7 * self.slopes[-1][0] / self.points[-1].mean
+
+    def predict(self, day: date) -> tuple[float, float]:
+        """Strength estimate and SD for a later day, following the current trend."""
+        last = self.points[-1]
+        dt = max(0, (day - last.day).days)
+        mean, var = _trend_forecast(last.mean, self.slopes[-1][0], self.cov, dt,
+                                    self.q_level, self.q_slope)
+        return mean, math.sqrt(var)
+
+
+def _trend_forecast(
+    level: float, slope: float, cov: tuple[float, float, float], dt: int,
+    q_level: float, q_slope: float,
+) -> tuple[float, float]:
+    """Mean and variance of the level dt days ahead (before seeing new data)."""
+    pll, plb, pbb = cov
+    var = pll + 2 * dt * plb + dt * dt * pbb + q_level * dt + q_slope * dt**3 / 3
+    return level + slope * dt, var
+
+
+def _run_trend(
+    obs: list[Obs], q_level: float, q_slope: float, r: float, slope_prior_var: float
+) -> tuple[TrendKalmanFit, float]:
+    lvl, b = obs[0].value, 0.0
+    pll, plb, pbb = r, 0.0, slope_prior_var
+    points = [FilterPoint(obs[0].day, obs[0].value, lvl, math.sqrt(pll))]
+    slopes = [(b, math.sqrt(pbb))]
+    loglik = 0.0
+    for prev, cur in zip(obs, obs[1:], strict=False):
+        dt = max(1, (cur.day - prev.day).days)
+        # Predict: F = [[1, dt], [0, 1]]. Slope noise accumulated over the gap
+        # also moves the level (integrated random walk), hence the dt^3/3, dt^2/2 terms.
+        lvl = lvl + b * dt
+        pll, plb, pbb = (
+            pll + 2 * dt * plb + dt * dt * pbb + q_level * dt + q_slope * dt**3 / 3,
+            plb + dt * pbb + q_slope * dt * dt / 2,
+            pbb + q_slope * dt,
+        )
+        # Update with this session's best e1RM.
+        s = pll + r
+        innov = cur.value - lvl
+        k_l, k_b = pll / s, plb / s
+        lvl += k_l * innov
+        b += k_b * innov
+        pll, plb, pbb = pll - k_l * pll, plb - k_l * plb, pbb - k_b * plb
+        loglik += -0.5 * (math.log(2 * math.pi * s) + innov**2 / s)
+        points.append(FilterPoint(cur.day, cur.value, lvl, math.sqrt(max(pll, 0.0))))
+        slopes.append((b, math.sqrt(max(pbb, 0.0))))
+    fit = TrendKalmanFit(points, slopes, (pll, plb, pbb), q_level, q_slope, r, loglik, True)
+    return fit, loglik
+
+
+def fit_trend_kalman(obs: list[Obs], grid: int = 10) -> TrendKalmanFit:
+    """Local linear trend filter with q_level, q_slope and r chosen by MLE.
+
+    A 3-D log-spaced grid over relative noise levels (grid^3 candidates).
+    """
+    if not obs:
+        raise ValueError("no observations")
+    obs = sorted(obs, key=lambda o: o.day)
+    level = sum(o.value for o in obs) / len(obs)
+    if level <= 0:
+        raise ValueError("e1RM observations must be positive")
+    slope_prior_var = (SLOPE_PRIOR_SD * level) ** 2
+
+    def run(noise: float, lvl_drift: float, slope_drift: float) -> TrendKalmanFit:
+        fit, _ = _run_trend(
+            obs, (lvl_drift * level) ** 2, (slope_drift * level) ** 2,
+            (noise * level) ** 2, slope_prior_var,
+        )
+        return fit
+
+    if len(obs) < MIN_OBS_TO_FIT:
+        fit = run(TREND_DEFAULT_NOISE, TREND_DEFAULT_LEVEL, TREND_DEFAULT_SLOPE)
+        return TrendKalmanFit(
+            fit.points, fit.slopes, fit.cov, fit.q_level, fit.q_slope, fit.r,
+            fit.loglik if len(obs) > 1 else None, fitted=False,
+        )
+
+    best: TrendKalmanFit | None = None
+    for noise in _logspace(0.005, 0.12, grid):
+        for lvl_drift in _logspace(0.0001, 0.02, grid):
+            for slope_drift in _logspace(0.00001, 0.002, grid):
+                fit = run(noise, lvl_drift, slope_drift)
+                if best is None or fit.loglik > best.loglik:  # type: ignore[operator]
+                    best = fit
+    assert best is not None
+    return best
+
+
 # --- Plateau detection ------------------------------------------------------
 
 # Two-sided 95% t critical values; beyond 30 df the normal value is close enough.

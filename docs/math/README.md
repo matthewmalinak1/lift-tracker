@@ -38,6 +38,7 @@ $$
 - $\Delta t$ = days since the last session, so uncertainty widens during long breaks.
 - $q$ (process noise) and $R_t$ (measurement noise) are estimated by maximum likelihood over my own history, not hand-picked.
 - Output: posterior mean $\hat{x}_t$ and variance $P_t$, giving the 95% band $\hat{x}_t \pm 1.96\sqrt{P_t}$.
+- **Current version:** a local linear trend model with a second state for the rate of gain. The first, no-trend version lost to a naive forecast on real data because it lagged steady progress; see [section 4b of the write-up](kalman-e1rm.md#4b-local-linear-trend-model-the-one-the-app-uses).
 - The RTS smoother then gives the best estimate of past strength using all data.
 
 ## 3. Bayesian readiness model

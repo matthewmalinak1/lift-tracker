@@ -13,7 +13,7 @@ from ..db import get_session
 from ..models import Exercise
 from ..queries import all_sets, muscles_for, session_bests, workouts_between
 from ..schemas import LiftProgress, LiftSummary, SeriesPoint, TrendOut, VolumeWeek
-from ..strength import Trend, fit_kalman, trend
+from ..strength import Trend, fit_trend_kalman, trend
 
 router = APIRouter(prefix="/progress")
 
@@ -29,7 +29,7 @@ def lifts(
     exercises = {e.id: e for e in session.scalars(select(Exercise))}
     out = []
     for ex_id, obs in bests.items():
-        fit = fit_kalman(obs)
+        fit = fit_trend_kalman(obs)
         e = exercises[ex_id]
         muscles = [recovery.Muscle(m) for m in e.muscles or []]
         primary = muscles[0] if muscles else recovery.DEFAULT_MUSCLES[e.split_day][0]
@@ -90,7 +90,7 @@ def lift_progress(
     if not obs:
         return empty
 
-    fit = fit_kalman(obs)
+    fit = fit_trend_kalman(obs)
     est, sd = fit.predict(today)
     best = max(obs, key=lambda o: o.value)
     heaviest = max(sets, key=lambda s: (s.weight, -s.workout.date.toordinal()))
