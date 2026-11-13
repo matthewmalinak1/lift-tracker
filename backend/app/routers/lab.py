@@ -7,10 +7,11 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from .. import backtest as bt
 from ..db import get_session
 from ..models import Exercise, WhoopDaily, Workout
 from ..queries import all_sets, session_bests
-from ..schemas import Lab, LabModel, PlateauRow
+from ..schemas import Backtest, BacktestLift, Lab, LabModel, PlateauRow
 from ..strength import MIN_OBS_TO_FIT, PLATEAU_MIN_SESSIONS, fit_kalman, trend
 from .body import muscle_states_for
 from .progress import trend_out
@@ -134,3 +135,50 @@ def lab(today: date | None = Query(default=None), session: Session = Depends(get
         ),
     ]
     return Lab(models=models, plateaus=plateaus)
+
+
+@router.get("/lab/backtest", response_model=Backtest)
+def backtest(session: Session = Depends(get_session)) -> Backtest:
+    """Out-of-sample test of the strength filter on your own history."""
+    bests = session_bests(all_sets(session))
+    names = dict(session.execute(select(Exercise.id, Exercise.name)).all())
+
+    all_preds: list[bt.Prediction] = []
+    per_lift = []
+    for ex_id, obs in bests.items():
+        preds = bt.walk_forward(ex_id, obs)
+        if not preds:
+            continue
+        all_preds.extend(preds)
+        s = bt.summarize(preds)
+        per_lift.append(
+            BacktestLift(
+                exercise_id=ex_id,
+                name=names[ex_id],
+                predictions=s.predictions,
+                coverage_95=round(s.coverage_95, 3),
+                mae_pct=round(s.mae_pct, 2),
+                naive_mae_pct=round(s.naive_mae_pct, 2),
+            )
+        )
+    per_lift.sort(key=lambda r: -r.predictions)
+
+    days = [o.day for obs in bests.values() for o in obs]
+    s = bt.summarize(all_preds)
+
+    def r(v: float | None, d: int = 3) -> float | None:
+        return None if v is None else round(v, d)
+
+    return Backtest(
+        predictions=s.predictions,
+        lifts=s.lifts,
+        sessions=session.scalar(select(func.count(func.distinct(Workout.date)))) or 0,
+        date_from=min(days) if days else None,
+        date_to=max(days) if days else None,
+        coverage_95=r(s.coverage_95),
+        band_pct=r(s.band_pct, 2),
+        mae_pct=r(s.mae_pct, 2),
+        naive_mae_pct=r(s.naive_mae_pct, 2),
+        improvement_pct=r(s.improvement_pct, 1),
+        per_lift=per_lift,
+    )

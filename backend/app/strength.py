@@ -113,7 +113,7 @@ def _logspace(lo: float, hi: float, n: int) -> list[float]:
     return [math.exp(a + (b - a) * i / (n - 1)) for i in range(n)]
 
 
-def fit_kalman(obs: list[Obs]) -> KalmanFit:
+def fit_kalman(obs: list[Obs], grid: int = 24) -> KalmanFit:
     """Filter a lift's history, choosing q and r by maximum likelihood.
 
     The search is a log-spaced grid over *relative* noise levels (as a
@@ -135,9 +135,9 @@ def fit_kalman(obs: list[Obs]) -> KalmanFit:
         return KalmanFit(points, q, r, ll if len(obs) > 1 else None, fitted=False)
 
     best: tuple[float, float, float] | None = None
-    for noise in _logspace(0.005, 0.12, 24):
+    for noise in _logspace(0.005, 0.12, grid):
         r = (noise * level) ** 2
-        for drift in _logspace(0.0002, 0.03, 24):
+        for drift in _logspace(0.0002, 0.03, grid):
             q = (drift * level) ** 2
             _, ll = _run(obs, q, r)
             if best is None or ll > best[0]:

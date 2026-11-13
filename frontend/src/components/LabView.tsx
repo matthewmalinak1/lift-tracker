@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Lab } from "../api";
+import BacktestCard from "./BacktestCard";
 import { TrendBadge } from "./Progress";
 
 const REPO = "https://github.com/matthewmalinak1/lift-tracker/blob/main/";
@@ -22,6 +23,8 @@ export default function LabView() {
       <p className="lab-intro muted">
         The models behind the app: what each one answers, what it has found, and how much data it still needs.
       </p>
+
+      <BacktestCard />
 
       {lab.models.map((m) => (
         <article key={m.key} className="card model-card">

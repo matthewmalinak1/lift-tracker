@@ -90,6 +90,7 @@ Single-user login, drawn as a 3×3 pattern (sent as its keypad digits, e.g. a Z 
 - [x] **Phase 0:** scaffold, data model, CI, deploy pipeline, installable app shell
 - [x] **Home screen:** holographic body map you drag to rotate (CSS 3D, momentum + snap); muscles shade red after training and fade over 3 days ([math](docs/math/muscle-recovery.md)); WHOOP stat panels
 - [x] **Phase 1:** workout logging (+ Log button, last-time numbers, most-recovered split suggestion, draft saved on device), exercise library with muscle tags, green-day calendar with day detail and PRs, pattern-lock login
+- [x] Walk-forward backtest of the strength filter on real history: band coverage, band width, error vs a naive forecast (Lab tab)
 - [x] Import past workouts from an Excel template (Calendar → Import): preview with row-level errors, confirm, re-uploads never duplicate
 - [ ] Offline set queue, DB-backed login lockout
 - [ ] **Phase 2:** WHOOP OAuth and daily sync (recovery, HRV, sleep, strain, steps)

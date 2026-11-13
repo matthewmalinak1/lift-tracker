@@ -61,6 +61,27 @@ The app maximizes this over a 24 × 24 log-spaced grid of *relative* noise level
 - the filtered estimate is much closer to the true strength than the raw readings are (mean squared error less than 60% of raw);
 - the 95% band actually contains the true value 85–99% of the time.
 
+## 6. Walk-forward backtest
+
+The checks above use simulated lifters. The backtest ([`backend/app/backtest.py`](../../backend/app/backtest.py), shown in the Lab tab) runs on **real history**:
+
+1. For each lift, start once it has 3 sessions.
+2. For session $t$, fit $q, r$ by MLE using **only sessions $1..t-1$** (refit every 3 steps), filter them, and predict session $t$:
+   $$\hat y_t = \hat x_{t-1}, \qquad \operatorname{Var}(y_t) = P_{t-1} + q\,\Delta t + r$$
+   The prediction variance includes $r$, because we're predicting a noisy *reading*, not the hidden strength.
+3. Compare against a naive forecast, $\hat y_t^{\text{naive}} = y_{t-1}$ ("same as last session").
+4. Pool every prediction across lifts and report:
+
+| Metric | Definition | Why it matters |
+|---|---|---|
+| Coverage | share of $y_t$ inside $\hat y_t \pm 1.96\sqrt{\operatorname{Var}}$ | calibration: should be ≈ 95% |
+| Band width | average $1.96\sqrt{\operatorname{Var}} / \hat y_t$ | coverage is trivial with huge bands; this keeps it honest |
+| MAE % | average $|y_t - \hat y_t| / y_t$ for filter and naive | accuracy, and whether the filter beats the obvious baseline |
+
+There is no look-ahead: a test asserts that changing a future session never changes an earlier prediction.
+
+**What to expect:** with only a few sessions per lift, coverage tends to come in a little under 95%. The noise parameters are estimated from little data and the band ignores that estimation uncertainty, so it is slightly overconfident early on. On simulated lifters, coverage rises from about 86% at 10 sessions per lift to about 91% at 60. A full Bayesian treatment of $q$ and $r$ would close the gap.
+
 ## Plateau detection
 
 Over the last 6 weeks, fit an ordinary least-squares line to the session e1RMs and compute a 95% confidence interval for the slope using the t distribution:

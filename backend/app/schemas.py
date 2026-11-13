@@ -252,3 +252,29 @@ class ImportReport(BaseModel):
     already_in_app: int  # workouts skipped because that date + split exists
     errors: list[ImportProblem]
     warnings: list[ImportProblem]
+
+
+# --- Backtest -----------------------------------------------------------------
+
+
+class BacktestLift(BaseModel):
+    exercise_id: int
+    name: str
+    predictions: int
+    coverage_95: float
+    mae_pct: float
+    naive_mae_pct: float
+
+
+class Backtest(BaseModel):
+    predictions: int
+    lifts: int
+    sessions: int
+    date_from: date | None
+    date_to: date | None
+    coverage_95: float | None
+    band_pct: float | None
+    mae_pct: float | None
+    naive_mae_pct: float | None
+    improvement_pct: float | None
+    per_lift: list[BacktestLift]

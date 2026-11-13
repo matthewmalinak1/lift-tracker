@@ -119,3 +119,17 @@ def test_bodyweight_exercises_dont_break_progress(client):
     r = client.get(f"/api/progress/lift/{leg_raise}")
     assert r.status_code == 200
     assert r.json()["series"] == []
+
+
+def test_backtest_endpoint(client):
+    lift = make_exercise(client, "BT Press", "chest_bi", ["chest"])
+    for i in range(8):
+        log(client, date(2025, 4, 1) + timedelta(days=4 * i), "chest_bi",
+            two_sets(lift, 150 + 2 * i, 8))
+    r = client.get("/api/lab/backtest")
+    assert r.status_code == 200
+    b = r.json()
+    row = next(x for x in b["per_lift"] if x["name"] == "BT Press")
+    assert row["predictions"] == 8 - 3
+    assert 0 <= b["coverage_95"] <= 1
+    assert b["mae_pct"] is not None and b["naive_mae_pct"] is not None

@@ -133,6 +133,7 @@ export const api = {
   lift: (id: number) => get<LiftProgress>(`/api/progress/lift/${id}?today=${today()}`),
   volume: (weeks = 4) => get<VolumeWeek[]>(`/api/progress/volume?today=${today()}&weeks=${weeks}`),
   lab: () => get<Lab>(`/api/lab?today=${today()}`),
+  backtest: () => get<Backtest>("/api/lab/backtest"),
   importXlsx: (file: File, commit: boolean) =>
     request<ImportReport>(`/api/import/xlsx?commit=${commit}&today=${today()}`, {
       method: "POST",
@@ -330,4 +331,29 @@ export interface ImportReport {
   already_in_app: number;
   errors: ImportProblem[];
   warnings: ImportProblem[];
+}
+
+// --- Backtest ---------------------------------------------------------------
+
+export interface BacktestLift {
+  exercise_id: number;
+  name: string;
+  predictions: number;
+  coverage_95: number;
+  mae_pct: number;
+  naive_mae_pct: number;
+}
+
+export interface Backtest {
+  predictions: number;
+  lifts: number;
+  sessions: number;
+  date_from: string | null;
+  date_to: string | null;
+  coverage_95: number | null;
+  band_pct: number | null;
+  mae_pct: number | null;
+  naive_mae_pct: number | null;
+  improvement_pct: number | null;
+  per_lift: BacktestLift[];
 }
