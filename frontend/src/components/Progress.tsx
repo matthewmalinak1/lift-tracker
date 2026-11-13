@@ -10,7 +10,9 @@ import {
   type TrendOut,
   type VolumeWeek,
 } from "../api";
+import HealthTrends from "./HealthTrends";
 import StrengthChart from "./StrengthChart";
+import Weight from "./Weight";
 
 export function TrendBadge({ t }: { t: TrendOut }) {
   if (t.status === "not_enough_data") {
@@ -138,7 +140,38 @@ function LiftDetail({ id }: { id: number }) {
   );
 }
 
-export default function Progress() {
+export type ProgressView = "strength" | "health" | "weight";
+
+const VIEWS: { id: ProgressView; label: string }[] = [
+  { id: "strength", label: "Strength" },
+  { id: "health", label: "Health" },
+  { id: "weight", label: "Weight" },
+];
+
+export default function Progress({
+  view,
+  onView,
+}: {
+  view: ProgressView;
+  onView: (v: ProgressView) => void;
+}) {
+  return (
+    <section className="progress">
+      <div className="segmented wide-seg">
+        {VIEWS.map((v) => (
+          <button key={v.id} className={view === v.id ? "active" : ""} onClick={() => onView(v.id)}>
+            {v.label}
+          </button>
+        ))}
+      </div>
+      {view === "strength" && <Strength />}
+      {view === "health" && <HealthTrends />}
+      {view === "weight" && <Weight />}
+    </section>
+  );
+}
+
+function Strength() {
   const [lifts, setLifts] = useState<LiftSummary[] | null>(null);
   const [openGroup, setOpenGroup] = useState<Muscle | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
@@ -172,7 +205,7 @@ export default function Progress() {
   };
 
   return (
-    <section className="progress">
+    <div className="progress">
       <p className="muted small lab-intro">Tap a muscle group, then an exercise, to see its strength curve.</p>
 
       <div className="groups">
@@ -220,6 +253,6 @@ export default function Progress() {
       </div>
 
       <Volume weeks={volume} />
-    </section>
+    </div>
   );
 }

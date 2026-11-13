@@ -154,6 +154,11 @@ export const api = {
   lab: () => get<Lab>(`/api/lab?today=${today()}`),
   backtest: () => get<Backtest>("/api/lab/backtest"),
   whoopStatus: () => get<WhoopStatus>("/api/whoop/status"),
+  weight: (days = 90) => get<WeightSummary>(`/api/weight?days=${days}&today=${today()}`),
+  logWeight: (date: string, weight: number) =>
+    request<void>("/api/weight", { method: "PUT", body: JSON.stringify({ date, weight }) }),
+  deleteWeight: (date: string) => del(`/api/weight/${date}`),
+  healthTrends: (days = 30) => get<HealthTrends>(`/api/health/trends?days=${days}&today=${today()}`),
   whoopSync: () => post<{ days_updated: number; synced_at: string }>("/api/whoop/sync"),
   whoopDisconnect: () => request<void>("/api/whoop/disconnect", { method: "POST" }),
 };
@@ -394,4 +399,42 @@ export interface WhoopStatus {
   last_sync_at: string | null;
   days_stored: number;
   first_day: string | null;
+}
+
+// --- Bodyweight & health trends ---------------------------------------------
+
+export interface WeightPoint {
+  date: string;
+  weight: number;
+  trend: number;
+  lower: number;
+  upper: number;
+}
+
+export interface WeightSummary {
+  unit: string;
+  points: WeightPoint[];
+  today_logged: boolean;
+  latest: number | null;
+  trend_now: number | null;
+  change_7d: number | null;
+  rate_per_week: number | null;
+  noise_lb: number | null;
+}
+
+export interface TrendDay {
+  date: string;
+  recovery_score: number | null;
+  strain: number | null;
+  sleep_hours: number | null;
+  sleep_performance: number | null;
+  steps: number | null;
+  hrv_rmssd_ms: number | null;
+  resting_hr: number | null;
+  workout: boolean;
+}
+
+export interface HealthTrends {
+  days: TrendDay[];
+  averages: Partial<Record<keyof Omit<TrendDay, "date" | "workout">, number | null>>;
 }

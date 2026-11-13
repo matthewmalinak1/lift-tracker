@@ -378,17 +378,22 @@ function WhoopBar({ onSynced }: { onSynced: () => void }) {
   );
 }
 
-export default function Body() {
+export default function Body({ onLogWeight }: { onLogWeight: () => void }) {
   const [status, setStatus] = useState<BodyStatus | null>(null);
   const [error, setError] = useState(false);
   const [selected, setSelected] = useState<Muscle | null>(null);
   const [reload, setReload] = useState(0);
+  const [weighedToday, setWeighedToday] = useState<boolean | null>(null);
 
   useEffect(() => {
     api
       .body()
       .then(setStatus)
       .catch(() => setError(true));
+    api
+      .weight(7)
+      .then((w) => setWeighedToday(w.today_logged))
+      .catch(() => setWeighedToday(null));
   }, [reload]);
 
   const whoop: WhoopToday | null = status?.whoop ?? null;
@@ -490,6 +495,11 @@ export default function Body() {
             {status.plan.message}
             {status.plan.last_trained && ` Last done ${ago(daysSince(status.plan.last_trained))}.`}
           </p>
+          {weighedToday === false && (
+            <button className="weigh-nudge" onClick={onLogWeight}>
+              ⚖ Log this morning's weight →
+            </button>
+          )}
         </div>
       )}
 

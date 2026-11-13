@@ -94,6 +94,8 @@ Single-user login, drawn as a 3×3 pattern (sent as its keypad digits, e.g. a Z 
 - [x] Walk-forward backtest of the strength filter on real history: band coverage, band width, error vs a naive forecast (Lab tab)
 - [x] Import past workouts from an Excel template (`POST /api/import/xlsx`; preview with row-level errors, re-uploads never duplicate). The in-app button was removed after the one-time import.
 - [x] Calendar heat map (green by sets, split tags, PR stars) and Progress grouped by muscle
+- [x] Bodyweight log with a Kalman-filtered trend, 7-day change, weekly rate and day-to-day noise (Progress → Weight)
+- [x] WHOOP trend charts: recovery, strain, sleep, steps, HRV, resting HR over 30/90 days with workout days marked (Progress → Health)
 - [ ] Offline set queue, DB-backed login lockout
 - [x] **Phase 2:** WHOOP OAuth 2.0 (signed state, rotating refresh tokens) and sync of recovery, HRV, resting HR, sleep, strain and steps into one row per day; syncs automatically when the app opens
 - [x] **Phase 3:** e1RM estimation and a Kalman filter with MLE-fitted noise and 95% bands ([math](docs/math/kalman-e1rm.md)); plateau detection; Lab tab

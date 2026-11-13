@@ -1815,3 +1815,146 @@ main {
   font-weight: 800;
   margin: 2px 0;
 }
+
+
+/* ---------- Progress: Strength / Health / Weight ---------- */
+.segmented.wide-seg {
+  align-self: stretch;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 3px;
+}
+.segmented {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 3px;
+}
+.segmented button {
+  padding: 8px 14px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.segmented button.active {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+.small-seg button {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+}
+.range-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.health,
+.weight {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.trend-card {
+  margin-top: 0;
+  padding: 12px 12px 8px;
+}
+.trend-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+.trend-head h3 {
+  font-size: 1rem;
+}
+.trend-nums {
+  display: flex;
+  gap: 14px;
+  text-align: right;
+}
+.trend-nums > span {
+  display: flex;
+  flex-direction: column;
+}
+.trend-nums strong {
+  font-variant-numeric: tabular-nums;
+}
+.muted-strong {
+  color: var(--muted);
+}
+.trend-note {
+  margin: 2px 0 0;
+  font-size: 0.68rem;
+}
+.chart .avg-line {
+  stroke: rgba(230, 237, 247, 0.45);
+  stroke-dasharray: 3 3;
+  stroke-width: 1;
+}
+.chart .workout-tick {
+  fill: var(--green);
+}
+.chart .hover-line {
+  stroke: rgba(230, 237, 247, 0.35);
+}
+.chart-empty {
+  padding: 20px 0;
+}
+
+.weigh-in {
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.weigh-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.weigh-input {
+  font-size: 1.4rem !important;
+  font-weight: 800;
+}
+.logged-ok {
+  color: #86efac;
+  margin: 0;
+}
+.stat-grid.four {
+  grid-template-columns: repeat(4, 1fr);
+}
+.stat-grid.four .stat strong {
+  font-size: 1rem;
+}
+.stat-grid.four .hud-label {
+  font-size: 0.55rem;
+}
+.weigh-list-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto 28px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.weigh-nudge {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-align: left;
+}

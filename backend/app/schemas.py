@@ -340,3 +340,50 @@ class WhoopStatus(BaseModel):
 class WhoopSyncResult(BaseModel):
     days_updated: int
     synced_at: datetime
+
+
+# --- Bodyweight -------------------------------------------------------------
+
+
+class WeightIn(BaseModel):
+    date: date
+    weight: float = Field(gt=50, lt=700)
+
+
+class WeightPoint(BaseModel):
+    date: date
+    weight: float  # what the scale said
+    trend: float  # Kalman-filtered body weight
+    lower: float
+    upper: float
+
+
+class WeightSummary(BaseModel):
+    unit: str
+    points: list[WeightPoint]
+    today_logged: bool
+    latest: float | None
+    trend_now: float | None
+    change_7d: float | None  # trend now minus trend 7 days ago
+    rate_per_week: float | None  # OLS slope of the trend over the last 21 days
+    noise_lb: float | None  # typical day-to-day scale swing (1 SD)
+
+
+# --- WHOOP trends -----------------------------------------------------------
+
+
+class TrendDay(BaseModel):
+    date: date
+    recovery_score: float | None
+    strain: float | None
+    sleep_hours: float | None
+    sleep_performance: float | None
+    steps: int | None
+    hrv_rmssd_ms: float | None
+    resting_hr: float | None
+    workout: bool
+
+
+class HealthTrends(BaseModel):
+    days: list[TrendDay]
+    averages: dict[str, float | None]

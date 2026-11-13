@@ -21,12 +21,16 @@ export default function StrengthChart({
   series,
   unit,
   today,
+  labels = { estimate: "Estimate", observed: "Session best" },
 }: {
   series: SeriesPoint[];
   unit: string;
   today?: { date: string; estimate: number; lower: number; upper: number } | null;
+  labels?: { estimate: string; observed: string };
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
+  // Bodyweight moves in tenths of a pound; lift estimates read fine as whole numbers.
+  const precise = labels.estimate !== "Estimate";
   const [hover, setHover] = useState<number | null>(null);
 
   const geo = useMemo(() => {
@@ -136,22 +140,25 @@ export default function StrengthChart({
       {h && (
         <div className="chart-tip" style={{ left: `${(X(h) / W) * 100}%` }}>
           <strong>{prettyDate(h.date)}</strong>
-          <span>Session best {Math.round(h.observed)} {unit}</span>
           <span>
-            Estimate {Math.round(h.estimate)} ({Math.round(h.lower)}–{Math.round(h.upper)})
+            {labels.observed} {h.observed % 1 ? h.observed.toFixed(1) : Math.round(h.observed)} {unit}
+          </span>
+          <span>
+            {labels.estimate} {h.estimate.toFixed(precise ? 1 : 0)} ({h.lower.toFixed(precise ? 1 : 0)}–
+            {h.upper.toFixed(precise ? 1 : 0)})
           </span>
         </div>
       )}
 
       <div className="chart-legend">
         <span>
-          <i className="lg-line" /> Estimate
+          <i className="lg-line" /> {labels.estimate}
         </span>
         <span>
           <i className="lg-band" /> 95% band
         </span>
         <span>
-          <i className="lg-dot" /> Session best
+          <i className="lg-dot" /> {labels.observed}
         </span>
       </div>
     </div>

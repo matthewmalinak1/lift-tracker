@@ -6,7 +6,7 @@ import LabView from "./components/LabView";
 import LogWorkout from "./components/LogWorkout";
 import Login from "./components/Login";
 import Logo from "./components/Logo";
-import Progress from "./components/Progress";
+import Progress, { type ProgressView } from "./components/Progress";
 import Sheet from "./components/Sheet";
 
 type Tab = "body" | "calendar" | "progress" | "lab";
@@ -20,6 +20,7 @@ const TABS: { id: Tab; label: string }[] = [
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("body");
+  const [progressView, setProgressView] = useState<ProgressView>("strength");
   const [health, setHealth] = useState<Health | null>(null);
   // null = still checking, so we don't flash the login screen on every open.
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
@@ -86,9 +87,16 @@ export default function App() {
       </header>
 
       <main key={version}>
-        {tab === "body" && <Body />}
+        {tab === "body" && (
+          <Body
+            onLogWeight={() => {
+              setProgressView("weight");
+              setTab("progress");
+            }}
+          />
+        )}
         {tab === "calendar" && <Calendar onChanged={changed} />}
-        {tab === "progress" && <Progress />}
+        {tab === "progress" && <Progress view={progressView} onView={setProgressView} />}
         {tab === "lab" && <LabView />}
       </main>
 

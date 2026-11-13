@@ -9,6 +9,7 @@ from sqlalchemy import text
 from . import auth
 from .db import engine
 from .routers import body, imports, lab, progress, training, whoop
+from .routers import health as health_routes
 from .schemas import Health, LoginIn, Me
 
 app = FastAPI(title="Lift Tracker API", version="0.3.0")
@@ -77,6 +78,7 @@ for r in (
     lab.router,
     imports.router,
     whoop.router,
+    health_routes.router,
 ):
     private.include_router(r)
 
