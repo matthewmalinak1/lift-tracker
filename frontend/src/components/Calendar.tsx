@@ -3,6 +3,7 @@ import {
   api,
   localDateISO,
   prettyDate,
+  recoveryZone,
   SPLIT_LABELS,
   type CalendarMonth,
   type DayDetail,
@@ -37,11 +38,14 @@ function DayPanel({ date, onChanged }: { date: string; onChanged: () => void }) 
     <div className="day-panel">
       <h2>{prettyDate(date, { weekday: "long", month: "long", day: "numeric" })}</h2>
 
-      {w && (
+      {w ? (
         <div className="day-whoop">
+          <span className="day-whoop-title hud-label">WHOOP</span>
           <div>
             <span className="hud-label">Recovery</span>
-            <strong>{w.recovery_score ?? "--"}%</strong>
+            <strong className={`zone-${recoveryZone(w.recovery_score) ?? "none"}`}>
+              {w.recovery_score ?? "--"}%
+            </strong>
           </div>
           <div>
             <span className="hud-label">HRV</span>
@@ -52,6 +56,8 @@ function DayPanel({ date, onChanged }: { date: string; onChanged: () => void }) 
             <strong>{w.sleep_hours ? `${w.sleep_hours.toFixed(1)} h` : "--"}</strong>
           </div>
         </div>
+      ) : (
+        detail && <p className="muted small">No WHOOP data for this day.</p>
       )}
 
       {!detail && <p className="muted">Loading…</p>}
@@ -144,6 +150,12 @@ export default function Calendar({ onChanged }: { onChanged: () => void }) {
   }, [reload]);
 
   const byDate = useMemo(() => new Map((data?.days ?? []).map((d) => [d.date, d])), [data]);
+  const recByDate = useMemo(
+    () => new Map((data?.whoop ?? []).map((w) => [w.date, w.recovery_score])),
+    [data],
+  );
+  const recScores = (data?.whoop ?? []).map((w) => w.recovery_score).filter((v): v is number => v !== null);
+  const avgRecovery = recScores.length ? Math.round(recScores.reduce((a, b) => a + b, 0) / recScores.length) : null;
   const monthSets = data?.days.reduce((a, d) => a + d.sets, 0) ?? 0;
   const splitCounts = (data?.days ?? []).reduce<Record<string, number>>((acc, d) => {
     acc[d.split_day] = (acc[d.split_day] ?? 0) + 1;
@@ -217,6 +229,7 @@ export default function Calendar({ onChanged }: { onChanged: () => void }) {
         {Array.from({ length: daysInMonth }, (_, i) => {
           const key = toKey(year, month, i + 1);
           const day = byDate.get(key);
+          const zone = recoveryZone(recByDate.get(key));
           const cls = [
             "cal2-day",
             day ? `trained lv${level(day.sets, data?.max_sets ?? 0)}` : "",
@@ -228,6 +241,7 @@ export default function Calendar({ onChanged }: { onChanged: () => void }) {
               <span className="num">{i + 1}</span>
               {day && <span className="split">{SPLIT_SHORT[day.split_day]}</span>}
               {day && day.prs > 0 && <span className="pr-star" title={`${day.prs} PR`}>★</span>}
+              {zone && <span className={`rec-dot ${zone}`} title={`Recovery ${recByDate.get(key)}%`} />}
             </button>
           );
         })}
@@ -245,6 +259,18 @@ export default function Calendar({ onChanged }: { onChanged: () => void }) {
         <span>
           <span className="gold">★</span> PR
         </span>
+      </div>
+      <div className="cal2-legend">
+        <span className="rec-legend">
+          <span className="rec-dot green" /> <span className="rec-dot yellow" /> <span className="rec-dot red" />
+          <span className="muted">WHOOP recovery</span>
+        </span>
+        {avgRecovery !== null && (
+          <span className="muted">
+            Avg recovery{" "}
+            <strong className={`zone-${recoveryZone(avgRecovery)}`}>{avgRecovery}%</strong>
+          </span>
+        )}
       </div>
 
       {data && data.days.length > 0 && (

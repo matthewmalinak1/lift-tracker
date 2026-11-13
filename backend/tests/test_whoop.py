@@ -194,6 +194,9 @@ def test_connect_callback_and_sync(client, fake):
     assert day["whoop"]["recovery_score"] == 74
     body = client.get("/api/body", params={"today": "2025-11-12"}).json()
     assert body["whoop"]["hrv_rmssd_ms"] == 88.5
+    cal = client.get("/api/calendar", params={"year": 2025, "month": 11}).json()
+    by_day = {w["date"]: w for w in cal["whoop"]}
+    assert by_day["2025-11-12"]["recovery_score"] == 74
 
 
 def test_expired_token_is_refreshed_and_rotated(client, fake):

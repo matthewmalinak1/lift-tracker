@@ -16,6 +16,7 @@ from ..queries import all_sets, workouts_between
 from ..schemas import (
     CalendarDay,
     CalendarMonth,
+    CalendarRecovery,
     DayDetail,
     DayExercise,
     DaySet,
@@ -210,10 +211,22 @@ def calendar_month(
         days.setdefault(w.date, CalendarDay(date=w.date, split_day=w.split_day, sets=0, prs=0))
 
     ordered = sorted(days.values(), key=lambda d: d.date)
+    whoop_days = session.scalars(
+        select(WhoopDaily).where(WhoopDaily.date.between(first, last)).order_by(WhoopDaily.date)
+    )
     return CalendarMonth(
         days=ordered,
         max_sets=max((d.sets for d in ordered), default=0),
         prs=sum(d.prs for d in ordered),
+        whoop=[
+            CalendarRecovery(
+                date=w.date,
+                recovery_score=w.recovery_score,
+                hrv_rmssd_ms=w.hrv_rmssd_ms,
+                sleep_hours=w.sleep_hours,
+            )
+            for w in whoop_days
+        ],
     )
 
 

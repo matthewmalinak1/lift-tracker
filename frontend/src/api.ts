@@ -349,10 +349,24 @@ export interface CalendarDay {
   prs: number;
 }
 
+export interface CalendarRecovery {
+  date: string;
+  recovery_score: number | null;
+  hrv_rmssd_ms: number | null;
+  sleep_hours: number | null;
+}
+
 export interface CalendarMonth {
   days: CalendarDay[];
   max_sets: number;
   prs: number;
+  whoop: CalendarRecovery[];
+}
+
+/** WHOOP's recovery zones: green 67-100, yellow 34-66, red 0-33. */
+export function recoveryZone(score: number | null | undefined): "green" | "yellow" | "red" | null {
+  if (score === null || score === undefined) return null;
+  return score >= 67 ? "green" : score >= 34 ? "yellow" : "red";
 }
 
 // --- WHOOP ------------------------------------------------------------------

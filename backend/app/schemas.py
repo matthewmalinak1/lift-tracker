@@ -293,10 +293,18 @@ class CalendarDay(BaseModel):
     prs: int
 
 
+class CalendarRecovery(BaseModel):
+    date: date
+    recovery_score: float | None
+    hrv_rmssd_ms: float | None
+    sleep_hours: float | None
+
+
 class CalendarMonth(BaseModel):
     days: list[CalendarDay]
     max_sets: int
     prs: int
+    whoop: list[CalendarRecovery]  # every day in the month with WHOOP data
 
 
 # --- WHOOP ------------------------------------------------------------------
