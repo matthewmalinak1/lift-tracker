@@ -1,5 +1,21 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { api, MUSCLE_LABELS, type BodyStatus, type Muscle, type WhoopStatus, type WhoopToday } from "../api";
+import {
+  api,
+  MUSCLE_LABELS,
+  recoveryZone,
+  SPLIT_LABELS,
+  type BodyStatus,
+  type Muscle,
+  type WhoopStatus,
+  type WhoopToday,
+} from "../api";
+
+function daysSince(iso: string) {
+  const d = new Date(iso + "T00:00");
+  const t = new Date();
+  t.setHours(0, 0, 0, 0);
+  return Math.round((t.getTime() - d.getTime()) / 86_400_000);
+}
 import { BACK, FRONT, HEAD, OUTLINE_HALF, VIEW_H, VIEW_W, type MuscleShape } from "./bodyShapes";
 import Body3D, { canUse3D } from "./body3d/Body3D";
 
@@ -20,59 +36,70 @@ function ago(days: number | null): string {
   return `${days} days ago`;
 }
 
-type StatKey = "recovery" | "hrv" | "rhr" | "sleep" | "strain" | "steps";
+const ZONE_COLOR = { green: "#22c55e", yellow: "#facc15", red: "#f43f5e" } as const;
 
-function stat(w: WhoopToday | null, key: StatKey): { value: string; unit: string } {
-  const n = (v: number | null | undefined, digits = 0) =>
-    v === null || v === undefined ? "--" : v.toFixed(digits);
-  switch (key) {
-    case "recovery":
-      return { value: n(w?.recovery_score), unit: "%" };
-    case "hrv":
-      return { value: n(w?.hrv_rmssd_ms), unit: "ms" };
-    case "rhr":
-      return { value: n(w?.resting_hr), unit: "bpm" };
-    case "sleep": {
-      const h = w?.sleep_hours;
-      if (h === null || h === undefined) return { value: "--", unit: "" };
-      return { value: `${Math.floor(h)}:${String(Math.round((h % 1) * 60)).padStart(2, "0")}`, unit: "h" };
-    }
-    case "strain":
-      return { value: n(w?.strain, 1), unit: "" };
-    case "steps":
-      return {
-        value: w?.steps === null || w?.steps === undefined ? "--" : w.steps.toLocaleString(),
-        unit: "",
-      };
-  }
+/** WHOOP-style dial: an arc filled to value/max with the reading in the middle. */
+function Ring({
+  label,
+  fraction,
+  color,
+  value,
+  unit,
+  sub,
+}: {
+  label: string;
+  fraction: number | null;
+  color: string;
+  value: string;
+  unit?: string;
+  sub?: string;
+}) {
+  const R = 40;
+  const C = 2 * Math.PI * R;
+  const f = fraction === null ? 0 : Math.max(0, Math.min(1, fraction));
+  return (
+    <div className="ring">
+      <svg viewBox="0 0 100 100" role="img" aria-label={`${label} ${value}${unit ?? ""}`}>
+        <circle cx="50" cy="50" r={R} className="ring-track" />
+        <circle
+          cx="50"
+          cy="50"
+          r={R}
+          className="ring-fill"
+          stroke={color}
+          strokeDasharray={`${C * f} ${C}`}
+          transform="rotate(-90 50 50)"
+          style={{ filter: `drop-shadow(0 0 4px ${color})` }}
+        />
+        <text x="50" y="50" className="ring-value" textAnchor="middle" dominantBaseline="central">
+          {value}
+          {unit && value !== "--" && <tspan className="ring-unit">{unit}</tspan>}
+        </text>
+      </svg>
+      <span className="ring-label">{label}</span>
+      {sub && <span className="ring-sub">{sub}</span>}
+    </div>
+  );
 }
 
-const LEFT: { key: StatKey; label: string }[] = [
-  { key: "recovery", label: "Recovery" },
-  { key: "hrv", label: "HRV" },
-  { key: "rhr", label: "Resting HR" },
-];
-const RIGHT: { key: StatKey; label: string }[] = [
-  { key: "sleep", label: "Sleep" },
-  { key: "strain", label: "Strain" },
-  { key: "steps", label: "Steps" },
-];
+function hm(hours: number | null | undefined) {
+  if (hours === null || hours === undefined) return "--";
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  return `${h}:${String(m === 60 ? 0 : m).padStart(2, "0")}`;
+}
 
-function StatPanel({ label, statKey, whoop, side }: {
-  label: string;
-  statKey: StatKey;
-  whoop: WhoopToday | null;
-  side: "left" | "right";
-}) {
-  const { value, unit } = stat(whoop, statKey);
+/** "+12%" style change vs the 30-day average, coloured by whether it's good. */
+function Delta({ now, avg, higherIsBetter, pct }: { now: number | null; avg: number | null; higherIsBetter: boolean; pct?: boolean }) {
+  if (now === null || avg === null || avg === 0) return null;
+  const diff = pct ? (100 * (now - avg)) / avg : now - avg;
+  if (Math.abs(diff) < (pct ? 1 : 0.5)) return <span className="delta flat">≈ avg</span>;
+  const good = diff > 0 === higherIsBetter;
   return (
-    <div className={`hud-stat ${side}`}>
-      <span className="hud-label">{label}</span>
-      <span className="hud-value">
-        {value}
-        {value !== "--" && <small>{unit}</small>}
-      </span>
-    </div>
+    <span className={`delta ${good ? "good" : "bad"}`}>
+      {diff > 0 ? "↑" : "↓"} {Math.abs(diff).toFixed(0)}
+      {pct ? "%" : ""} vs avg
+    </span>
   );
 }
 
@@ -364,51 +391,106 @@ export default function Body() {
       .catch(() => setError(true));
   }, [reload]);
 
-  const whoop = status?.whoop ?? null;
+  const whoop: WhoopToday | null = status?.whoop ?? null;
+  const base = status?.baseline ?? null;
+  const zone = recoveryZone(whoop?.recovery_score);
   const recovering = status
     ? (Object.entries(status.muscles) as [Muscle, BodyStatus["muscles"][Muscle]][])
         .filter(([, s]) => s.fatigue > 0)
         .sort((a, b) => b[1].fatigue - a[1].fatigue)
     : [];
   const sel = selected && status ? status.muscles[selected] : null;
+  const sleepFrac =
+    whoop?.sleep_performance != null
+      ? whoop.sleep_performance / 100
+      : whoop?.sleep_hours != null
+        ? whoop.sleep_hours / 8
+        : null;
 
   return (
     <section className="body-screen">
-      <div className="hud">
-        <div className="hud-col">
-          {LEFT.map((s) => (
-            <StatPanel key={s.key} label={s.label} statKey={s.key} whoop={whoop} side="left" />
-          ))}
-        </div>
+      <div className="rings">
+        <Ring
+          label="Recovery"
+          fraction={whoop?.recovery_score != null ? whoop.recovery_score / 100 : null}
+          color={zone ? ZONE_COLOR[zone] : "#3a4a66"}
+          value={whoop?.recovery_score != null ? String(Math.round(whoop.recovery_score)) : "--"}
+          unit="%"
+        />
+        <Ring
+          label="Strain"
+          fraction={whoop?.strain != null ? whoop.strain / 21 : null}
+          color="#3d9cf0"
+          value={whoop?.strain != null ? whoop.strain.toFixed(1) : "--"}
+          sub="of 21"
+        />
+        <Ring
+          label="Sleep"
+          fraction={sleepFrac}
+          color="#a5b4fc"
+          value={hm(whoop?.sleep_hours)}
+          sub={whoop?.sleep_performance != null ? `${Math.round(whoop.sleep_performance)}% perf.` : undefined}
+        />
+      </div>
 
-        <div className="hud-figure">
-          {canUse3D ? (
-            <Body3D status={status} selected={selected} onSelect={setSelected} />
-          ) : (
-            <Turntable status={status} selected={selected} onSelect={setSelected} />
-          )}
-        </div>
+      <div className="figure-stage">
+        {canUse3D ? (
+          <Body3D status={status} selected={selected} onSelect={setSelected} />
+        ) : (
+          <Turntable status={status} selected={selected} onSelect={setSelected} />
+        )}
 
-        <div className="hud-col">
-          {RIGHT.map((s) => (
-            <StatPanel key={s.key} label={s.label} statKey={s.key} whoop={whoop} side="right" />
-          ))}
+        <div className="corner-chip left">
+          <span className="hud-label">Steps</span>
+          <strong>{whoop?.steps != null ? whoop.steps.toLocaleString() : "--"}</strong>
+        </div>
+        <div className="corner-chip right">
+          <div>
+            <span className="hud-label">Resting HR</span>
+            <strong>
+              {whoop?.resting_hr != null ? Math.round(whoop.resting_hr) : "--"}
+              <small> bpm</small>
+            </strong>
+            <Delta now={whoop?.resting_hr ?? null} avg={base?.resting_hr ?? null} higherIsBetter={false} />
+          </div>
+          <div>
+            <span className="hud-label">HRV</span>
+            <strong>
+              {whoop?.hrv_rmssd_ms != null ? Math.round(whoop.hrv_rmssd_ms) : "--"}
+              <small> ms</small>
+            </strong>
+            <Delta now={whoop?.hrv_rmssd_ms ?? null} avg={base?.hrv_rmssd_ms ?? null} higherIsBetter pct />
+          </div>
         </div>
       </div>
 
-      <div className="heat-legend">
-        <span>Trained today</span>
-        <div className="heat-bar" />
-        <span>Recovered ({status?.recovery_days ?? 3}d)</span>
-      </div>
-
-      {sel && selected && (
+      {sel && selected ? (
         <p className="muscle-readout">
           <strong>{MUSCLE_LABELS[selected]}</strong>{" "}
           {sel.last_trained
             ? `· trained ${ago(sel.days_since)} · ${Math.round((1 - sel.fatigue) * 100)}% recovered`
             : "· not trained recently · fully recovered"}
         </p>
+      ) : (
+        <div className="heat-legend">
+          <span>Trained today</span>
+          <div className="heat-bar" />
+          <span>Recovered ({status?.recovery_days ?? 3}d)</span>
+        </div>
+      )}
+
+      {status && (
+        <div className={`card today-card ${status.plan.recovery_zone ?? ""}`}>
+          <div className="today-head">
+            <span className="hud-label">Today</span>
+            {status.plan.recovery_zone && <span className={`rec-dot ${status.plan.recovery_zone}`} />}
+          </div>
+          <div className="today-split">{SPLIT_LABELS[status.plan.suggested_split]}</div>
+          <p className="muted small">
+            {status.plan.message}
+            {status.plan.last_trained && ` Last done ${ago(daysSince(status.plan.last_trained))}.`}
+          </p>
+        </div>
       )}
 
       {recovering.length > 0 && (

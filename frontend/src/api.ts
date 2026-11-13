@@ -63,11 +63,28 @@ export interface WhoopToday {
   steps: number | null;
 }
 
+export interface WhoopBaseline {
+  days: number;
+  recovery_score: number | null;
+  hrv_rmssd_ms: number | null;
+  resting_hr: number | null;
+  sleep_hours: number | null;
+}
+
+export interface TodayPlan {
+  suggested_split: SplitDay;
+  last_trained: string | null;
+  recovery_zone: "green" | "yellow" | "red" | null;
+  message: string;
+}
+
 export interface BodyStatus {
   today: string;
   recovery_days: number;
   muscles: Record<Muscle, MuscleStatus>;
   whoop: WhoopToday | null;
+  baseline: WhoopBaseline | null;
+  plan: TodayPlan;
 }
 
 export function localDateISO(d = new Date()): string {

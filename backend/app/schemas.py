@@ -85,11 +85,30 @@ class WhoopToday(BaseModel):
     steps: int | None
 
 
+class WhoopBaseline(BaseModel):
+    """Averages over the 30 days before today, to compare today against."""
+
+    days: int
+    recovery_score: float | None
+    hrv_rmssd_ms: float | None
+    resting_hr: float | None
+    sleep_hours: float | None
+
+
+class TodayPlan(BaseModel):
+    suggested_split: SplitDay
+    last_trained: date | None  # last time that split was done
+    recovery_zone: str | None  # green | yellow | red, from WHOOP
+    message: str
+
+
 class BodyStatus(BaseModel):
     today: date
     recovery_days: int
     muscles: dict[Muscle, MuscleStatus]
     whoop: WhoopToday | None
+    baseline: WhoopBaseline | None
+    plan: TodayPlan
 
 
 # --- Calendar day detail ----------------------------------------------------

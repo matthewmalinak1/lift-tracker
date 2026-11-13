@@ -1685,3 +1685,133 @@ main {
   top: 0;
   left: 2px;
 }
+
+
+/* ---------- Body page v3: rings + full-width figure ---------- */
+.rings {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.ring {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.ring svg {
+  width: 100%;
+  max-width: 104px;
+}
+.ring-track {
+  fill: none;
+  stroke: rgba(124, 196, 255, 0.12);
+  stroke-width: 8;
+}
+.ring-fill {
+  fill: none;
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.8s ease;
+}
+.ring-value {
+  fill: var(--text);
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.ring-unit {
+  font-size: 11px;
+  fill: var(--muted);
+  font-weight: 600;
+}
+.ring-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+}
+.ring-sub {
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.figure-stage {
+  position: relative;
+  border-radius: var(--radius);
+  background-image:
+    linear-gradient(rgba(124, 196, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124, 196, 255, 0.05) 1px, transparent 1px),
+    radial-gradient(ellipse at 50% 55%, rgba(61, 156, 240, 0.18), transparent 65%);
+  background-size: 18px 18px, 18px 18px, 100% 100%;
+}
+.figure-stage .body3d {
+  aspect-ratio: auto;
+  height: min(54dvh, 440px);
+  max-height: none;
+}
+.corner-chip {
+  position: absolute;
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(124, 196, 255, 0.25);
+  background: rgba(11, 18, 32, 0.75);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+.corner-chip.left {
+  left: 8px;
+}
+.corner-chip.right {
+  right: 8px;
+  text-align: right;
+}
+.corner-chip > div {
+  display: flex;
+  flex-direction: column;
+}
+.corner-chip strong {
+  color: var(--accent);
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 8px rgba(124, 196, 255, 0.4);
+}
+.corner-chip small {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-shadow: none;
+}
+.delta {
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+.delta.good { color: #86efac; }
+.delta.bad { color: #fda4af; }
+.delta.flat { color: var(--muted); }
+.figure-stage .turn-hint {
+  bottom: auto;
+  top: 6px;
+}
+
+.today-card {
+  margin-top: 0;
+  border-left: 3px solid var(--accent);
+}
+.today-card.green { border-left-color: #22c55e; }
+.today-card.yellow { border-left-color: #facc15; }
+.today-card.red { border-left-color: #f43f5e; }
+.today-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.today-split {
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin: 2px 0;
+}

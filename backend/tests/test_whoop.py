@@ -194,6 +194,11 @@ def test_connect_callback_and_sync(client, fake):
     assert day["whoop"]["recovery_score"] == 74
     body = client.get("/api/body", params={"today": "2025-11-12"}).json()
     assert body["whoop"]["hrv_rmssd_ms"] == 88.5
+    assert body["plan"]["recovery_zone"] == "green"  # 74% recovery
+    assert body["plan"]["message"].startswith("Recovery is green")
+    later = client.get("/api/body", params={"today": "2025-11-14"}).json()
+    assert later["baseline"]["days"] == 2  # Nov 12 and 13 come before the 14th
+    assert later["baseline"]["hrv_rmssd_ms"] == 88.5
     cal = client.get("/api/calendar", params={"year": 2025, "month": 11}).json()
     by_day = {w["date"]: w for w in cal["whoop"]}
     assert by_day["2025-11-12"]["recovery_score"] == 74
