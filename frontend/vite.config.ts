@@ -26,7 +26,7 @@ export default defineConfig({
       },
       workbox: {
         // Never serve API responses from the cache; data must be live.
-        navigateFallbackDenylist: [/^\/api\//, /\.xlsx$/],
+        navigateFallbackDenylist: [/^\/api\//, /\.xlsx$/, /\.html$/],
       },
     }),
   ],
